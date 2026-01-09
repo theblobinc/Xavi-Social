@@ -14,7 +14,7 @@ final class Controller extends Package
 {
     protected $pkgHandle = 'xavi_social';
     protected $appVersionRequired = '9.0.0';
-    protected $pkgVersion = '0.1.4';
+    protected $pkgVersion = '0.1.5';
 
     /**
      * Concrete v9+ default package autoloading expects classes under src/Concrete/...
@@ -110,6 +110,9 @@ final class Controller extends Package
             '/xavi_social/api/accounts/delete',
             '/xavi_social/api/feed',
             '/xavi_social/api/post',
+            '/xavi_social/api/thread',
+            '/xavi_social/api/profile',
+            '/xavi_social/api/notifications',
             '/xavi_social/api/debug',
             '/xavi_social/auth/login',
             '/xavi_social/auth/logout',

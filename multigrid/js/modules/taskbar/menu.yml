@@ -5,26 +5,6 @@
 
 startMenu:
   sections:
-    - id: map
-      label: Map
-      items:
-        - id: mapVisibility
-          icon: "🗺️"
-          labelWhenHidden: "Show Map"
-          labelWhenVisible: "Hide Map"
-          action: toggleMapVisibility
-        - id: mapMenu
-          icon: "🗂️"
-          label: "Map Menu"
-          action: openMapMenu
-        - id: mapControls
-          icon: "🧭"
-          label: "Map Controls"
-          action: toggleMapControls
-        - id: bus
-          icon: "🚌"
-          label: "Bus Routes"
-          action: toggleBusPopup
 
     - id: music
       label: Music

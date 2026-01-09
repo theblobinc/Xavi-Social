@@ -63,7 +63,11 @@ function renderApp(session, atproto) {
   const localPdsAccount = session?.localPdsAccount && typeof session.localPdsAccount === 'object' ? session.localPdsAccount : null;
 
   let state = {
+    route: { name: 'feed' },
     feed: { loading: true, error: null, items: [] },
+    thread: { loading: false, error: null, uri: null, post: null, replies: [] },
+    profile: { loading: false, error: null, actor: null, profile: null, feed: [] },
+    notifications: { loading: false, error: null, items: [] },
     posting: false,
     postError: null,
     connectError: null,
@@ -72,6 +76,58 @@ function renderApp(session, atproto) {
 
   const atprotoSession = atproto?.session || null;
   const atprotoClientFactory = atproto?.getClient || null;
+
+  function encodeRoutePart(value) {
+    return encodeURIComponent(String(value || ''));
+  }
+
+  function decodeRoutePart(value) {
+    try {
+      return decodeURIComponent(String(value || ''));
+    } catch {
+      return String(value || '');
+    }
+  }
+
+  function getDefaultActor() {
+    const localHandle = localPdsAccount && localPdsAccount.handle ? String(localPdsAccount.handle) : '';
+    const localDid = localPdsAccount && localPdsAccount.did ? String(localPdsAccount.did) : '';
+    const did = atprotoSession?.did ? String(atprotoSession.did) : '';
+    return localHandle || did || localDid || '';
+  }
+
+  function parseRouteFromLocation() {
+    const raw = (window.location.hash || '').replace(/^#/, '').trim();
+    if (!raw) return { name: 'feed' };
+
+    const [head, ...rest] = raw.split('/');
+    const name = String(head || '').toLowerCase();
+    if (name === 'feed') return { name: 'feed' };
+    if (name === 'notifications') return { name: 'notifications' };
+    if (name === 'profile') {
+      const actor = decodeRoutePart(rest.join('/')) || getDefaultActor();
+      return { name: 'profile', actor };
+    }
+    if (name === 'thread') {
+      const uri = decodeRoutePart(rest.join('/'));
+      return { name: 'thread', uri };
+    }
+    return { name: 'feed' };
+  }
+
+  function setRoute(nextRoute, { replace = false } = {}) {
+    const r = nextRoute && typeof nextRoute === 'object' ? nextRoute : { name: 'feed' };
+    let hash = '#feed';
+    if (r.name === 'notifications') hash = '#notifications';
+    if (r.name === 'profile') hash = `#profile/${encodeRoutePart(r.actor || getDefaultActor())}`;
+    if (r.name === 'thread') hash = `#thread/${encodeRoutePart(r.uri || '')}`;
+
+    if (replace) {
+      window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}${hash}`);
+    } else {
+      window.location.hash = hash;
+    }
+  }
 
   function relTime(iso) {
     if (!iso) return '';
@@ -113,6 +169,79 @@ function renderApp(session, atproto) {
     return json;
   }
 
+  async function atpFetchJson(url, options = {}) {
+    if (!atprotoSession) {
+      throw new Error('Not connected to ATProto.');
+    }
+    const res = await atprotoSession.fetchHandler(url, {
+      headers: {
+        Accept: 'application/json',
+        ...(options.headers || {}),
+      },
+      ...options,
+    });
+    const text = await res.text();
+    let json;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = null;
+    }
+    if (!res.ok) {
+      const message = (json && (json.message || json.error)) || `Request failed (${res.status})`;
+      const err = new Error(message);
+      err.status = res.status;
+      err.payload = json;
+      throw err;
+    }
+    return json;
+  }
+
+  function normalizeAtprotoPostFromTimeline(postView) {
+    const post = postView && typeof postView === 'object' ? postView : null;
+    const record = post && post.record && typeof post.record === 'object' ? post.record : null;
+    const author = post && post.author && typeof post.author === 'object' ? post.author : null;
+    const text = record && typeof record.text === 'string' ? record.text : String(record?.text || '');
+    const createdAt = record && record.createdAt ? String(record.createdAt) : '';
+    return {
+      uri: post && post.uri ? String(post.uri) : '',
+      cid: post && post.cid ? String(post.cid) : '',
+      text,
+      createdAt,
+      indexedAt: createdAt,
+      author: {
+        did: author && author.did ? String(author.did) : '',
+        handle: author && author.handle ? String(author.handle) : '',
+        displayName: author && (author.displayName || author.handle) ? String(author.displayName || author.handle) : 'Account',
+        avatar: author && author.avatar ? String(author.avatar) : '',
+      },
+      replyCount: typeof post?.replyCount === 'number' ? post.replyCount : null,
+      repostCount: typeof post?.repostCount === 'number' ? post.repostCount : null,
+      likeCount: typeof post?.likeCount === 'number' ? post.likeCount : null,
+    };
+  }
+
+  function renderNav() {
+    const active = state.route?.name || 'feed';
+    const tab = (name, label, href) => {
+      const isActive = active === name;
+      return `<a class="btn btn-link btn-sm" style="padding-left: 0; ${isActive ? 'font-weight: 700;' : ''}" href="${href}">${escapeHtml(label)}</a>`;
+    };
+    return `
+      <div class="xv-header" style="justify-content: space-between; align-items: center;">
+        <div style="display:flex; gap: 12px; flex-wrap: wrap; align-items: baseline;">
+          <h2 class="h3" style="margin-top: 0; margin-bottom: 0;">Social</h2>
+          ${tab('feed', 'Timeline', '#feed')}
+          ${tab('notifications', 'Notifications', '#notifications')}
+          ${tab('profile', 'Profile', `#profile/${encodeRoutePart(getDefaultActor())}`)}
+        </div>
+        <div class="text-muted small" style="white-space: nowrap;">
+          ${loggedIn ? 'Signed in' : 'Read-only'}
+        </div>
+      </div>
+    `;
+  }
+
   function renderAvatarLabel(name) {
     const letter = (String(name).trim()[0] || '?').toUpperCase();
     return `<span class="xv-avatar" aria-hidden="true">${escapeHtml(letter)}</span>`;
@@ -150,6 +279,8 @@ function renderApp(session, atproto) {
         const authorHandle = (item.author && item.author.handle) || '';
         const timeLabel = relTime(item.createdAt || item.indexedAt);
         const postId = item.uri || item.cid || authorHandle + ':' + (item.createdAt || '');
+        const threadHref = item.uri ? `#thread/${encodeRoutePart(item.uri)}` : '';
+        const profileHref = authorHandle ? `#profile/${encodeRoutePart(authorHandle)}` : (item.author?.did ? `#profile/${encodeRoutePart(item.author.did)}` : '');
 
         return `
           <article class="panel panel-default xv-post" data-id="${escapeHtml(postId)}">
@@ -160,12 +291,12 @@ function renderApp(session, atproto) {
                 </div>
                 <div class="media-body">
                   <div class="xv-meta">
-                    <strong>${escapeHtml(authorName)}</strong>
-                    ${authorHandle ? `<span class="text-muted">@${escapeHtml(authorHandle)}</span>` : ''}
+                    ${profileHref ? `<a href="${profileHref}"><strong>${escapeHtml(authorName)}</strong></a>` : `<strong>${escapeHtml(authorName)}</strong>`}
+                    ${authorHandle ? `${profileHref ? `<a class="text-muted" href="${profileHref}">@${escapeHtml(authorHandle)}</a>` : `<span class="text-muted">@${escapeHtml(authorHandle)}</span>`}` : ''}
                     ${timeLabel ? `<span class="text-muted" aria-hidden="true">·</span><span class="text-muted">${escapeHtml(timeLabel)}</span>` : ''}
                   </div>
 
-                  <div class="xv-content">${escapeHtml(item.text || '')}</div>
+                  ${threadHref ? `<a href="${threadHref}" class="xv-content" style="display:block; text-decoration:none;">${escapeHtml(item.text || '')}</a>` : `<div class="xv-content">${escapeHtml(item.text || '')}</div>`}
                   ${renderActions(postId)}
                 </div>
               </div>
@@ -174,6 +305,137 @@ function renderApp(session, atproto) {
         `;
       })
       .join('');
+  }
+
+  function renderThreadBody() {
+    if (state.thread.loading) {
+      return `<div class="panel panel-default"><div class="panel-body text-muted">Loading thread…</div></div>`;
+    }
+    if (state.thread.error) {
+      return `<div class="panel panel-default"><div class="panel-body">${escapeHtml(String(state.thread.error))}</div></div>`;
+    }
+    if (!state.thread.post) {
+      return `<div class="panel panel-default"><div class="panel-body text-muted">No thread loaded.</div></div>`;
+    }
+
+    const items = [state.thread.post, ...(Array.isArray(state.thread.replies) ? state.thread.replies : [])];
+    return items
+      .map((item, idx) => {
+        const authorName = (item.author && (item.author.displayName || item.author.handle)) || 'Account';
+        const authorHandle = (item.author && item.author.handle) || '';
+        const timeLabel = relTime(item.createdAt || item.indexedAt);
+        const postId = item.uri || item.cid || authorHandle + ':' + (item.createdAt || '');
+        const profileHref = authorHandle ? `#profile/${encodeRoutePart(authorHandle)}` : (item.author?.did ? `#profile/${encodeRoutePart(item.author.did)}` : '');
+
+        const indent = idx === 0 ? 0 : 14;
+        return `
+          <article class="panel panel-default xv-post" data-id="${escapeHtml(postId)}" style="margin-left: ${indent}px;">
+            <div class="panel-body">
+              <div class="media">
+                <div class="media-left">${renderAvatarLabel(authorName)}</div>
+                <div class="media-body">
+                  <div class="xv-meta">
+                    ${profileHref ? `<a href="${profileHref}"><strong>${escapeHtml(authorName)}</strong></a>` : `<strong>${escapeHtml(authorName)}</strong>`}
+                    ${authorHandle ? `${profileHref ? `<a class="text-muted" href="${profileHref}">@${escapeHtml(authorHandle)}</a>` : `<span class="text-muted">@${escapeHtml(authorHandle)}</span>`}` : ''}
+                    ${timeLabel ? `<span class="text-muted" aria-hidden="true">·</span><span class="text-muted">${escapeHtml(timeLabel)}</span>` : ''}
+                  </div>
+                  <div class="xv-content">${escapeHtml(item.text || '')}</div>
+                </div>
+              </div>
+            </div>
+          </article>
+        `;
+      })
+      .join('');
+  }
+
+  function renderNotificationsBody() {
+    if (!loggedIn) {
+      return `<div class="panel panel-default"><div class="panel-body text-muted">Log in to view notifications.</div></div>`;
+    }
+    if (state.notifications.loading) {
+      return `<div class="panel panel-default"><div class="panel-body text-muted">Loading notifications…</div></div>`;
+    }
+    if (state.notifications.error) {
+      return `<div class="panel panel-default"><div class="panel-body">${escapeHtml(String(state.notifications.error))}</div></div>`;
+    }
+    const items = Array.isArray(state.notifications.items) ? state.notifications.items : [];
+    if (items.length === 0) {
+      return `<div class="panel panel-default"><div class="panel-body text-muted">No notifications.</div></div>`;
+    }
+    return items
+      .map((n) => {
+        const author = n.author && typeof n.author === 'object' ? n.author : null;
+        const reason = n.reason ? String(n.reason) : 'activity';
+        const timeLabel = relTime(n.indexedAt || n.createdAt);
+        const name = (author && (author.displayName || author.handle)) || 'Account';
+        const handle = author && author.handle ? String(author.handle) : '';
+        const profileHref = handle ? `#profile/${encodeRoutePart(handle)}` : (author?.did ? `#profile/${encodeRoutePart(author.did)}` : '');
+
+        return `
+          <div class="panel panel-default">
+            <div class="panel-body">
+              <div class="xv-meta">
+                ${profileHref ? `<a href="${profileHref}"><strong>${escapeHtml(name)}</strong></a>` : `<strong>${escapeHtml(name)}</strong>`}
+                ${handle ? (profileHref ? `<a class="text-muted" href="${profileHref}">@${escapeHtml(handle)}</a>` : `<span class="text-muted">@${escapeHtml(handle)}</span>`) : ''}
+                <span class="text-muted" aria-hidden="true">·</span>
+                <span class="text-muted">${escapeHtml(reason)}</span>
+                ${timeLabel ? `<span class="text-muted" aria-hidden="true">·</span><span class="text-muted">${escapeHtml(timeLabel)}</span>` : ''}
+              </div>
+              ${n.record && n.record.text ? `<div class="xv-content">${escapeHtml(String(n.record.text))}</div>` : ''}
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+  }
+
+  function renderProfileBody() {
+    if (!loggedIn) {
+      return `<div class="panel panel-default"><div class="panel-body text-muted">Log in to view profiles.</div></div>`;
+    }
+    if (state.profile.loading) {
+      return `<div class="panel panel-default"><div class="panel-body text-muted">Loading profile…</div></div>`;
+    }
+    if (state.profile.error) {
+      return `<div class="panel panel-default"><div class="panel-body">${escapeHtml(String(state.profile.error))}</div></div>`;
+    }
+
+    const p = state.profile.profile && typeof state.profile.profile === 'object' ? state.profile.profile : null;
+    const displayName = p && (p.displayName || p.handle) ? String(p.displayName || p.handle) : (state.profile.actor || 'Profile');
+    const handle = p && p.handle ? String(p.handle) : '';
+    const did = p && p.did ? String(p.did) : '';
+    const desc = p && p.description ? String(p.description) : '';
+
+    const header = `
+      <div class="panel panel-default">
+        <div class="panel-heading"><strong>${escapeHtml(displayName)}</strong> ${handle ? `<span class="text-muted">@${escapeHtml(handle)}</span>` : ''}</div>
+        <div class="panel-body">
+          ${did ? `<div class="text-muted small" style="word-break: break-all;">${escapeHtml(did)}</div>` : ''}
+          ${desc ? `<div class="xv-content" style="margin-top: 8px;">${escapeHtml(desc)}</div>` : ''}
+        </div>
+      </div>
+    `;
+
+    const items = Array.isArray(state.profile.feed) ? state.profile.feed : [];
+    const feedHtml = items.length
+      ? items
+          .map((item) => {
+            const timeLabel = relTime(item.createdAt || item.indexedAt);
+            const threadHref = item.uri ? `#thread/${encodeRoutePart(item.uri)}` : '';
+            return `
+              <article class="panel panel-default xv-post">
+                <div class="panel-body">
+                  ${timeLabel ? `<div class="text-muted small">${escapeHtml(timeLabel)}</div>` : ''}
+                  ${threadHref ? `<a href="${threadHref}" class="xv-content" style="display:block; text-decoration:none;">${escapeHtml(item.text || '')}</a>` : `<div class="xv-content">${escapeHtml(item.text || '')}</div>`}
+                </div>
+              </article>
+            `;
+          })
+          .join('')
+      : `<div class="panel panel-default"><div class="panel-body text-muted">No posts.</div></div>`;
+
+    return header + feedHtml;
   }
 
   function renderComposer() {
@@ -297,6 +559,22 @@ function renderApp(session, atproto) {
   }
 
   function paint() {
+    const route = parseRouteFromLocation();
+    state.route = route;
+
+    let centerTitle = 'Timeline';
+    let centerBody = renderFeedBody();
+    if (route.name === 'thread') {
+      centerTitle = 'Thread';
+      centerBody = renderThreadBody();
+    } else if (route.name === 'notifications') {
+      centerTitle = 'Notifications';
+      centerBody = renderNotificationsBody();
+    } else if (route.name === 'profile') {
+      centerTitle = 'Profile';
+      centerBody = renderProfileBody();
+    }
+
     root.innerHTML = `
       <div class="xv-shell">
         <div class="xv-layout">
@@ -305,11 +583,12 @@ function renderApp(session, atproto) {
           </aside>
 
           <main class="xv-col xv-center" aria-label="Feed">
-            <div class="xv-header">
-              <h2 class="h3" style="margin-top: 0;">Feed</h2>
+            ${renderNav()}
+            <div class="xv-header" style="margin-top: 10px;">
+              <h2 class="h3" style="margin-top: 0; margin-bottom: 0;">${escapeHtml(centerTitle)}</h2>
             </div>
-            ${renderComposer()}
-            <div id="feed" class="xv-feed">${renderFeedBody()}</div>
+            ${route.name === 'feed' ? renderComposer() : ''}
+            <div id="feed" class="xv-feed">${centerBody}</div>
           </main>
 
           <aside class="xv-col xv-right" aria-label="Details">
@@ -443,68 +722,15 @@ function renderApp(session, atproto) {
     });
   }
 
-  async function loadFeed() {
+  async function loadTimeline() {
     state.feed.loading = true;
     state.feed.error = null;
     paint();
 
     try {
-      if (atprotoSession) {
-        const tokenSet = await atprotoSession.getTokenSet('auto');
-        const pdsUrl = normalizeBaseUrl(tokenSet?.aud);
-        const did = tokenSet?.sub || atprotoSession.did;
-
-        if (!pdsUrl || !did) {
-          throw new Error('ATProto session is missing PDS/DID');
-        }
-
-        const url = new URL(`${pdsUrl}/xrpc/com.atproto.repo.listRecords`);
-        url.searchParams.set('repo', did);
-        url.searchParams.set('collection', 'app.bsky.feed.post');
-        url.searchParams.set('limit', '30');
-
-        const resp = await atprotoSession.fetchHandler(url.toString(), {
-          method: 'GET',
-          headers: { Accept: 'application/json' },
-        });
-
-        const bodyText = await resp.text();
-        const json = bodyText ? JSON.parse(bodyText) : null;
-        if (!resp.ok || !json) {
-          const message = (json && (json.message || json.error)) || `ATProto feed failed (${resp.status})`;
-          throw new Error(message);
-        }
-
-        const handle = (localStorage.getItem(STORAGE_KEYS.lastHandle) || '').trim();
-        const records = Array.isArray(json.records) ? json.records : [];
-        const items = records
-          .map((r) => {
-            const value = r && typeof r === 'object' ? r.value : null;
-            const text = value && typeof value === 'object' ? String(value.text || '') : '';
-            const createdAt = value && typeof value === 'object' ? String(value.createdAt || '') : '';
-            return {
-              uri: String(r.uri || ''),
-              cid: String(r.cid || ''),
-              text,
-              createdAt,
-              indexedAt: createdAt,
-              author: {
-                did,
-                handle,
-                displayName: handle || did,
-                avatar: '',
-              },
-            };
-          })
-          .filter((x) => x.text);
-
-        state.feed.source = 'atproto(pds, browser)';
-        state.feed.items = items;
-      } else {
-        const resp = await fetchJson('/xavi_social/api/feed');
-        state.feed.source = resp?.source;
-        state.feed.items = resp?.items || [];
-      }
+      const resp = await fetchJson('/xavi_social/api/feed?limit=30');
+      state.feed.source = resp?.source;
+      state.feed.items = resp?.items || [];
       state.feed.loading = false;
       state.feed.error = null;
     } catch (err) {
@@ -515,8 +741,108 @@ function renderApp(session, atproto) {
     paint();
   }
 
+  async function loadThread(uri) {
+    state.thread.loading = true;
+    state.thread.error = null;
+    state.thread.uri = uri || null;
+    state.thread.post = null;
+    state.thread.replies = [];
+    paint();
+
+    try {
+      if (!uri) throw new Error('Missing thread URI.');
+
+      const url = `/xavi_social/api/thread?uri=${encodeURIComponent(uri)}`;
+      const json = await fetchJson(url);
+      state.thread.post = json?.post || null;
+      state.thread.replies = json?.replies || [];
+      state.thread.loading = false;
+      state.thread.error = null;
+    } catch (err) {
+      state.thread.loading = false;
+      state.thread.error = err?.message || String(err);
+    }
+
+    paint();
+  }
+
+  async function loadProfile(actor) {
+    state.profile.loading = true;
+    state.profile.error = null;
+    state.profile.actor = actor || getDefaultActor();
+    state.profile.profile = null;
+    state.profile.feed = [];
+    paint();
+
+    try {
+      const resolvedActor = actor || getDefaultActor();
+
+      const url = resolvedActor
+        ? `/xavi_social/api/profile?actor=${encodeURIComponent(resolvedActor)}`
+        : '/xavi_social/api/profile';
+      const json = await fetchJson(url);
+      state.profile.profile = json?.profile || null;
+      state.profile.feed = json?.feed || [];
+
+      state.profile.loading = false;
+      state.profile.error = null;
+    } catch (err) {
+      state.profile.loading = false;
+      state.profile.error = err?.message || String(err);
+    }
+
+    paint();
+  }
+
+  async function loadNotifications() {
+    state.notifications.loading = true;
+    state.notifications.error = null;
+    paint();
+
+    try {
+      const json = await fetchJson('/xavi_social/api/notifications?limit=30');
+      state.notifications.items = json?.items || [];
+      state.notifications.loading = false;
+      state.notifications.error = null;
+    } catch (err) {
+      state.notifications.loading = false;
+      state.notifications.error = err?.message || String(err);
+    }
+
+    paint();
+  }
+
+  let _routeLoadToken = 0;
+  async function loadForCurrentRoute() {
+    const token = ++_routeLoadToken;
+    const route = parseRouteFromLocation();
+    if (token !== _routeLoadToken) return;
+
+    if (route.name === 'thread') {
+      await loadThread(route.uri);
+      return;
+    }
+    if (route.name === 'notifications') {
+      await loadNotifications();
+      return;
+    }
+    if (route.name === 'profile') {
+      await loadProfile(route.actor);
+      return;
+    }
+
+    await loadTimeline();
+  }
+
   paint();
-  loadFeed();
+  window.addEventListener('hashchange', () => {
+    paint();
+    loadForCurrentRoute();
+  });
+  if (!window.location.hash) {
+    setRoute({ name: 'feed' }, { replace: true });
+  }
+  loadForCurrentRoute();
 }
 
 async function fetchConcreteSession() {

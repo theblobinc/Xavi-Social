@@ -429,9 +429,22 @@ final class Post extends PageController
                 $snippet = '';
             }
 
+            // PDS sometimes reports expired access tokens as HTTP 400 with error=ExpiredToken.
+            // Normalize this to 401 so callers can refreshSession and retry.
+            $normalizedStatus = $status;
+            if (
+                $status === 400 &&
+                (
+                    ($err !== '' && stripos($err, 'ExpiredToken') !== false) ||
+                    ($msg !== '' && stripos($msg, 'expired') !== false)
+                )
+            ) {
+                $normalizedStatus = 401;
+            }
+
             return [
                 'ok' => false,
-                'status' => $status,
+                'status' => $normalizedStatus,
                 'error' => $err !== '' ? $err : 'upstream_error',
                 'message' => $msg !== '' ? $msg : ('PDS createRecord failed (HTTP ' . $status . ')'),
                 'raw' => $snippet,
