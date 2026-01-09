@@ -1,0 +1,17 @@
+{
+  "name": "myplaylist_panel",
+  "version": "1.0.0",
+  "displayName": "My Playlist Panel",
+  "description": "Launches the My Playlist floating media panel",
+  "dependencies": ["media_search", "utils"],
+  "scripts": [
+    "my-playlist-panel.js"
+  ],
+  "components": [],
+  "zIndex": {
+    "overlay": "PLAYLIST_OVERLAY",
+    "tab": "PLAYLIST_TAB",
+    "controls": "PLAYLIST_CONTROLS"
+  },
+  "exports": {}
+}

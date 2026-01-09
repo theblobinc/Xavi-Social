@@ -1,0 +1,151 @@
+.xv-shell {
+  position: relative;
+  overflow: visible;
+  padding: 16px 12px 24px;
+  background: #000;
+  color: #fff;
+}
+
+.xv-shell a {
+  color: inherit;
+}
+
+.xv-shell .text-muted {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.xv-shell .panel {
+  background: transparent;
+  color: inherit;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.xv-shell .panel-heading {
+  background: transparent;
+  color: inherit;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.xv-shell .panel-body {
+  color: inherit;
+}
+
+.xv-shell .form-control,
+.xv-shell input,
+.xv-shell textarea {
+  background: transparent;
+  color: inherit;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.xv-shell .btn-primary,
+.xv-shell .btn-default {
+  background: transparent;
+  color: inherit;
+  border-color: currentColor;
+}
+
+.xv-shell .btn-link {
+  color: inherit;
+}
+
+.xv-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 640px) minmax(220px, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.xv-col {
+  min-width: 0;
+}
+
+.xv-left,
+.xv-right {
+  position: sticky;
+  top: 0;
+}
+
+@media (max-width: 991px) {
+  .xv-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .xv-left,
+  .xv-right {
+    position: static;
+  }
+}
+
+.xv-header {
+  display: flex;
+  align-items: baseline;
+    position: relative;
+    overflow: visible;
+  gap: 12px;
+    background: #000;
+    color: #fff;
+}
+
+.xv-post .panel-body {
+  padding: 12px;
+}
+
+.xv-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  line-height: 1.2;
+}
+
+.xv-content {
+  margin-top: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.xv-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  border: 1px solid currentColor;
+  user-select: none;
+}
+
+.xv-stats {
+  margin-top: 10px;
+}
+
+.xv-actions {
+  margin-top: 6px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.xv-actions .btn {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.xv-link-preview {
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+
+.xv-composer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.xv-you {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}

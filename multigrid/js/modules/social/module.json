@@ -1,0 +1,16 @@
+{
+  "name": "social",
+  "version": "1.0.0",
+  "displayName": "Social",
+  "description": "Main social overlay panel for the grid.",
+  "dependencies": [
+    "utils"
+  ],
+  "scripts": [
+    "social-overlay.js"
+  ],
+  "components": [
+    "xavi-social-overlay"
+  ],
+  "exports": {}
+}

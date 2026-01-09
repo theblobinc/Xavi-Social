@@ -1,0 +1,19 @@
+{
+  "name": "taskbar",
+  "version": "1.0.0",
+  "displayName": "Grid Taskbar",
+  "description": "Panel grid system with drag-drop and resize functionality",
+  "dependencies": ["gis", "utils", "playlist_overlay", "media_search"],
+  "scripts": [
+    "taskbar.js"
+  ],
+  "components": [
+    "panel-taskbar"
+  ],
+  "zIndex": {
+    "base": "TASKBAR_BASE",
+    "menus": "TASKBAR_MENUS",
+    "popups": "TASKBAR_POPUPS"
+  },
+  "exports": {}
+}

@@ -1,0 +1,60 @@
+{
+  "name": "music_visualizer",
+  "version": "1.0.0",
+  "displayName": "Music Visualizer",
+  "description": "Background music visualization layer for the workspace",
+  "dependencies": [],
+  "taskbar": {
+    "startMenu": {
+      "section": {
+        "id": "musicVisualizer",
+        "label": "Music Visualizer",
+        "items": [
+          {
+            "id": "visualizerToggle",
+            "icon": "🎵",
+            "labelWhenDisabled": "Enable",
+            "labelWhenEnabled": "Disable",
+            "action": "toggleMusicVisualizer"
+          },
+          {
+            "id": "visualizerSettings",
+            "icon": "⚙️",
+            "label": "Settings",
+            "action": "openMusicVisualizerSettings"
+          },
+          {
+            "id": "visualizerPresets",
+            "icon": "✨",
+            "label": "Presets",
+            "items": [
+              {
+                "id": "presetBars",
+                "icon": "▮",
+                "label": "Bars",
+                "action": "setMusicVisualizerPreset:bars"
+              },
+              {
+                "id": "presetDots",
+                "icon": "•",
+                "label": "Dots",
+                "action": "setMusicVisualizerPreset:dots"
+              },
+              {
+                "id": "presetWave",
+                "icon": "〰",
+                "label": "Wave",
+                "action": "setMusicVisualizerPreset:wave"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "scripts": [
+    "music-visualizer.js"
+  ],
+  "components": [],
+  "exports": {}
+}

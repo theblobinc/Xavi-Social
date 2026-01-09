@@ -1,0 +1,64 @@
+# Taskbar Start Menu definition (YAML-lite)
+# Notes:
+# - This is intentionally a tiny subset of YAML (indent + key/value + lists).
+# - Parsed by Taskbar.parseYamlLite() in taskbar.js
+
+startMenu:
+  sections:
+    - id: map
+      label: Map
+      items:
+        - id: mapVisibility
+          icon: "🗺️"
+          labelWhenHidden: "Show Map"
+          labelWhenVisible: "Hide Map"
+          action: toggleMapVisibility
+        - id: mapMenu
+          icon: "🗂️"
+          label: "Map Menu"
+          action: openMapMenu
+        - id: mapControls
+          icon: "🧭"
+          label: "Map Controls"
+          action: toggleMapControls
+        - id: bus
+          icon: "🚌"
+          label: "Bus Routes"
+          action: toggleBusPopup
+
+    - id: music
+      label: Music
+      items:
+        - id: playlistViewer
+          icon: "📋"
+          label: "Playlist Viewer"
+          action: launchPanel:playlist-viewer
+
+    - id: musicVisualizer
+      label: Music Visualizer
+      items:
+        - id: visualizerToggle
+          icon: "🎵"
+          labelWhenDisabled: "Enable"
+          labelWhenEnabled: "Disable"
+          action: toggleMusicVisualizer
+        - id: visualizerSettings
+          icon: "⚙️"
+          label: "Settings"
+          action: openMusicVisualizerSettings
+        - id: visualizerPresets
+          icon: "✨"
+          label: "Presets"
+          items:
+            - id: presetBars
+              icon: "▮"
+              label: "Bars"
+              action: setMusicVisualizerPreset:bars
+            - id: presetDots
+              icon: "•"
+              label: "Dots"
+              action: setMusicVisualizerPreset:dots
+            - id: presetWave
+              icon: "〰"
+              label: "Wave"
+              action: setMusicVisualizerPreset:wave

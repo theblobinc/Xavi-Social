@@ -1,0 +1,13 @@
+services:
+  frontend-build:
+    image: node:22.12.0-bookworm-slim
+    working_dir: /work/frontend
+    volumes:
+      - ../../..:/work
+      - xavi_social_frontend_node_modules:/work/frontend/node_modules
+    environment:
+      - CI=1
+    command: ["sh", "-lc", "npm ci && npm run build"]
+
+volumes:
+  xavi_social_frontend_node_modules:

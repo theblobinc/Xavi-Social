@@ -1,0 +1,19 @@
+{
+  "name": "video-panel",
+  "version": "1.0.0",
+  "displayName": "Video Player Panel",
+  "description": "Floating panel wrapper around the global video player",
+  "dependencies": ["taskbar", "media_player", "utils"],
+  "scripts": [
+    "video-player-panel.js"
+  ],
+  "components": [
+    "video-player-panel"
+  ],
+  "zIndex": {
+    "dock": "VIDEO_DOCK",
+    "mini": "MUSIC_MINI_PLAYER",
+    "expanded": "MUSIC_EXPANDED_PLAYER"
+  },
+  "exports": {}
+}

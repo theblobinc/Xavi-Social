@@ -1,0 +1,18 @@
+{
+  "name": "media_search",
+  "version": "1.0.0",
+  "displayName": "Media Search",
+  "description": "Self-contained media search and playlist management component.",
+  "dependencies": [
+    "utils"
+  ],
+  "scripts": [
+    "media-search.js",
+    "media-search-panel.js"
+  ],
+  "components": [
+    "media-search",
+    "media-search-panel"
+  ],
+  "exports": {}
+}

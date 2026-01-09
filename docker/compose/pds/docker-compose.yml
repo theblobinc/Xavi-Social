@@ -1,0 +1,52 @@
+name: xavi-social-pds
+
+services:
+  pds-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PDS_DB_USER:-pds}
+      POSTGRES_PASSWORD: ${PDS_DB_PASSWORD:-change-me}
+      POSTGRES_DB: ${PDS_DB_NAME:-pds}
+    volumes:
+      - pds_pg_data:/var/lib/postgresql/data
+    networks:
+      - ai_invest
+
+  pds:
+    image: ghcr.io/bluesky-social/pds:latest
+    restart: unless-stopped
+    depends_on:
+      - pds-postgres
+    environment:
+      PDS_HOSTNAME: ${PDS_HOSTNAME:-www.princegeorge.app}
+      PDS_LOG_LEVEL: info
+
+      # Local dev default: allow auto-provisioning without manual invite codes.
+      # Override by setting PDS_INVITE_REQUIRED=1 if you want invites enforced.
+      PDS_INVITE_REQUIRED: ${PDS_INVITE_REQUIRED:-0}
+
+      # Required secrets (generate locally; do not commit real values)
+      PDS_JWT_SECRET: ${PDS_JWT_SECRET}
+      PDS_ADMIN_PASSWORD: ${PDS_ADMIN_PASSWORD}
+      PDS_PLC_ROTATION_KEY_K256_PRIVATE_KEY_HEX: ${PDS_PLC_ROTATION_KEY_K256_PRIVATE_KEY_HEX}
+      PDS_SIGNING_KEY_K256_PRIVATE_KEY_HEX: ${PDS_SIGNING_KEY_K256_PRIVATE_KEY_HEX}
+
+      # Postgres
+      PDS_DB_URL: postgres://${PDS_DB_USER:-pds}:${PDS_DB_PASSWORD:-change-me}@pds-postgres:5432/${PDS_DB_NAME:-pds}?sslmode=disable
+
+      # Keep it simple: store blobs on disk
+      PDS_BLOBSTORE_DISK_LOCATION: ${PDS_BLOBSTORE_DISK_LOCATION:-/var/lib/pds/blobs}
+      PDS_BLOBSTORE_DISK_TMP_LOCATION: ${PDS_BLOBSTORE_DISK_TMP_LOCATION:-/var/lib/pds/tmp}
+    volumes:
+      - pds_data:/var/lib/pds
+    networks:
+      - ai_invest
+
+volumes:
+  pds_data:
+  pds_pg_data:
+
+networks:
+  ai_invest:
+    external: true

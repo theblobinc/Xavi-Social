@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "../../../packages/xavi_social"
+		},
+		{
+			"path": "../../.."
+		},
+		{
+			"path": "../../../.."
+		}
+	],
+	"settings": {}
+}

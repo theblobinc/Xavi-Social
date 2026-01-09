@@ -1,0 +1,23 @@
+{
+  "name": "playlist_overlay",
+  "version": "1.0.0",
+  "displayName": "Playlist Overlay Controller",
+  "description": "Moves the playlist overlay into the floating layer and applies workspace-scoped styling.",
+  "dependencies": [
+    "utils"
+  ],
+  "scripts": [
+    "playlist-viewer-template.js",
+    "playlist-viewer.js",
+    "playlist-overlay.js",
+    "playlist-init.js"
+  ],
+  "components": [
+    "playlist-viewer"
+  ],
+  "zIndex": {
+    "overlay": "PLAYLIST_OVERLAY",
+    "tab": "PLAYLIST_TAB"
+  },
+  "exports": {}
+}

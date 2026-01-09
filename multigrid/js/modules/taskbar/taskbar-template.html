@@ -1,0 +1,1972 @@
+<!-- Taskbar Shadow DOM Template -->
+<style>
+    @import url('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
+</style>
+<style>
+    :host {
+        display: block;
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        height: 108px;
+        z-index: var(--z-taskbar-base, 10000);
+        overflow: visible;
+    }
+
+    /* Base Taskbar Layout */
+    .taskbar {
+        position: absolute;
+        bottom: 0;
+        left: 8px;
+        right: 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 100px;
+        min-height: 100px;
+        max-height: 100px;
+        background: rgba(12, 12, 12, 0.96);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 8px;
+        padding: 6px 12px;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+
+    /* Taskbar pages (desktop flattens pages; mobile becomes swipe carousel) */
+    .taskbar-carousel {
+        display: contents;
+    }
+
+    .taskbar-page {
+        display: contents;
+    }
+
+    .taskbar-clock {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 10px;
+        height: 36px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.04);
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 0.9rem;
+        font-weight: 500;
+        flex-shrink: 0;
+        user-select: none;
+        white-space: nowrap;
+    }
+
+    /* Desktop ordering: keep music dock on the far right.
+       (Mobile behavior is controlled via the max-width media query below.) */
+    .taskbar-app-buttons {
+        order: 0;
+    }
+
+    .taskbar-clock {
+        order: 1;
+    }
+
+    .taskview-grid-container {
+        order: 10;
+        flex: 1 1 0;
+        min-width: 0;
+    }
+
+    .panel-buttons {
+        order: 20;
+        flex: 0 1 auto;
+        min-width: 0;
+    }
+
+    .video-player-dock {
+        order: 100;
+        flex-shrink: 0;
+    }
+
+    /* If vertical space is constrained (short viewport), switch task tiles to compact icon layout.
+       This is independent of the mobile swipe carousel (which is width-based). */
+    @media (max-height: 520px) {
+        .taskview-grid.empty {
+            display: none;
+        }
+
+        .taskview-grid-container {
+            max-height: 56px;
+        }
+
+        .taskview-grid {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            height: 56px;
+            gap: 8px;
+            padding: 0 2px;
+            background-image: none;
+            background-size: auto;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+
+        .taskview-tile {
+            padding: 8px;
+            border-radius: 10px;
+        }
+
+        .taskview-tile-info {
+            flex-direction: row;
+            align-items: center;
+            gap: 6px;
+            padding: 0;
+        }
+
+        .taskview-label {
+            display: none;
+        }
+    }
+
+    @media (max-width: 720px) {
+        :host {
+            height: 108px;
+        }
+
+        .taskbar {
+            height: 100px;
+            min-height: 100px;
+            max-height: 100px;
+            left: 6px;
+            right: 6px;
+            padding: 6px 8px;
+            gap: 0;
+        }
+
+        .taskbar-carousel {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            scroll-snap-type: x mandatory;
+            scrollbar-width: none;
+        }
+
+        .taskbar-carousel::-webkit-scrollbar {
+            display: none;
+        }
+
+        .taskbar-page {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 100%;
+            height: 100%;
+            padding: 0 4px;
+            scroll-snap-align: start;
+            box-sizing: border-box;
+        }
+
+        .taskbar-page-home {
+            justify-content: space-between;
+        }
+
+        .taskbar-page-apps,
+        .taskbar-page-panels {
+            justify-content: flex-start;
+        }
+
+        .taskview-grid.empty {
+            display: none;
+        }
+
+        .taskview-grid-container {
+            max-height: 56px;
+        }
+
+        .taskview-grid {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            height: 56px;
+            gap: 8px;
+            padding: 0 2px;
+            background-image: none;
+            background-size: auto;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+
+        .taskview-tile {
+            padding: 8px;
+            border-radius: 10px;
+        }
+
+        .taskview-tile-info {
+            flex-direction: row;
+            align-items: center;
+            gap: 6px;
+            padding: 0;
+        }
+
+        .taskview-label {
+            display: none;
+        }
+    }
+
+    /* Ultra-tight layout for ~400px wide screens */
+    @media (max-width: 420px) {
+        .taskbar {
+            left: 2px;
+            right: 2px;
+            padding: 4px 2px;
+        }
+
+        .taskbar-page {
+            gap: 6px;
+            padding: 0 2px;
+        }
+
+        .taskbar-page-home {
+            justify-content: space-between;
+        }
+
+        .taskbar-corner {
+            width: clamp(64px, 28vw, 86px);
+            gap: 2px;
+        }
+
+        .taskbar-corner .taskbar-clock {
+            height: 28px;
+            padding: 0 2px;
+            font-size: 0.7rem;
+        }
+
+        .taskbar-corner .start-menu-btn,
+        .taskbar-corner .corner-btn {
+            height: 28px;
+            font-size: 0.72rem;
+            border-radius: 5px;
+        }
+
+        .taskbar-corner .corner-btn {
+            gap: 4px;
+        }
+    }
+
+    .taskbar-app-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+
+    .taskbar-corner {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr 1fr;
+        gap: 6px;
+        align-items: stretch;
+        justify-items: stretch;
+        flex-shrink: 0;
+        width: clamp(120px, 30vw, 170px);
+    }
+
+    .taskbar-corner .taskbar-clock {
+        grid-column: 1 / -1;
+        width: 100%;
+        height: 42px;
+        cursor: pointer;
+    }
+
+    @media (max-width: 720px) {
+        .taskbar-corner {
+            width: clamp(74px, 30vw, 110px);
+            gap: 3px;
+        }
+
+        .taskbar-corner .taskbar-clock {
+            height: 32px;
+            padding: 0 4px;
+            font-size: 0.74rem;
+        }
+
+        .taskbar-corner .start-menu-btn,
+        .taskbar-corner .corner-btn {
+            height: 32px;
+            font-size: 0.78rem;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .taskbar-corner {
+            width: clamp(70px, 30vw, 96px);
+        }
+
+        .taskbar-corner .taskbar-clock {
+            padding: 0 4px;
+        }
+    }
+
+    .taskbar-corner .start-menu-btn,
+    .taskbar-corner .corner-btn {
+        width: 100%;
+        height: 42px;
+        min-width: 0;
+    }
+
+    .taskbar-corner .corner-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+        user-select: none;
+        white-space: nowrap;
+    }
+
+    .taskbar-corner .corner-btn:hover {
+        background: rgba(74, 158, 255, 0.3);
+        border-color: #4a9eff;
+    }
+
+    .taskbar-corner .corner-btn.active {
+        background: rgba(74, 158, 255, 0.4);
+        border-color: #4a9eff;
+        box-shadow: 0 0 12px rgba(74, 158, 255, 0.5);
+    }
+
+    .start-menu-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-width: 70px;
+        height: 36px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+    }
+
+    .start-menu-btn:hover {
+        background: rgba(74, 158, 255, 0.3);
+        border-color: #4a9eff;
+    }
+
+    .start-menu-btn.active {
+        background: rgba(74, 158, 255, 0.4);
+        border-color: #4a9eff;
+        box-shadow: 0 0 12px rgba(74, 158, 255, 0.5);
+    }
+
+    /* bus toggle moved into Start menu */
+
+    /* Workspace Manager */
+    .workspace-manager {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+        padding: 0 8px;
+        border-right: 1px solid rgba(255, 255, 255, 0.15);
+        margin-right: 8px;
+    }
+
+    .workspace-items {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .workspace-item {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border-radius: 6px;
+        border: 2px solid rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.08);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+    }
+
+    .workspace-item:hover {
+        background: rgba(255, 255, 255, 0.15);
+        border-color: rgba(255, 255, 255, 0.35);
+    }
+
+    .workspace-item.current {
+        border-color: #4a9eff;
+        background: rgba(74, 158, 255, 0.2);
+    }
+
+    .workspace-item.has-audio {
+        border-color: #4aff4a;
+        background: rgba(74, 255, 74, 0.15);
+    }
+
+    .workspace-item.current.has-audio {
+        border-color: #4aff4a;
+        box-shadow: 0 0 8px rgba(74, 255, 74, 0.4);
+    }
+
+    .workspace-item .workspace-icon {
+        font-size: 16px;
+        line-height: 1;
+        pointer-events: none;
+    }
+
+    .workspace-item.current .workspace-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border: 2px solid rgba(74, 255, 74, 0.8);
+        border-radius: 50%;
+        background: rgba(74, 255, 74, 0.1);
+    }
+
+    .workspace-item .workspace-audio-btn {
+        position: absolute;
+        bottom: -4px;
+        right: -4px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: rgba(12, 12, 12, 0.95);
+        border: 2px solid rgba(255, 86, 86, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        z-index: 10;
+        color: rgba(255, 86, 86, 0.9);
+    }
+
+    .workspace-item .workspace-audio-btn:hover {
+        background: rgba(255, 86, 86, 0.2);
+        border-color: rgba(255, 86, 86, 1);
+        transform: scale(1.15);
+    }
+
+    .workspace-item .workspace-audio-btn.active {
+        background: rgba(74, 255, 74, 0.3);
+        border-color: rgba(74, 255, 74, 0.9);
+        color: rgba(74, 255, 74, 1);
+    }
+
+    .workspace-item .workspace-audio-btn.active:hover {
+        background: rgba(74, 255, 74, 0.4);
+        border-color: rgba(74, 255, 74, 1);
+    }
+
+    .workspace-item.has-audio .workspace-audio-btn {
+        animation: pulse-speaker 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-speaker {
+        0%, 100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+        50% {
+            transform: scale(1.1);
+            opacity: 0.85;
+        }
+    }
+
+    .workspace-item .workspace-close-btn {
+        position: absolute;
+        top: -4px;
+        left: -4px;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: rgba(12, 12, 12, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        line-height: 1;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        z-index: 10;
+        opacity: 0;
+    }
+
+    .workspace-item:hover .workspace-close-btn {
+        opacity: 1;
+    }
+
+    .workspace-item .workspace-close-btn:hover {
+        background: rgba(255, 86, 86, 0.4);
+        border-color: #ff5656;
+        color: #ff5656;
+        transform: scale(1.1);
+    }
+
+    .workspace-add-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border-radius: 6px;
+        border: 2px dashed rgba(255, 255, 255, 0.3);
+        background: rgba(255, 255, 255, 0.05);
+        color: rgba(255, 255, 255, 0.6);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+    }
+
+    .workspace-add-btn:hover {
+        background: rgba(74, 158, 255, 0.2);
+        border-color: #4a9eff;
+        color: #4a9eff;
+    }
+
+    /* Media Dock */
+    .video-player-dock {
+        display: none;
+        position: relative;
+        flex-shrink: 0;
+        /* Keep dock rightmost via flex order (not auto-margins). */
+        margin-left: 0;
+    }
+
+    .video-player-dock.visible {
+        display: flex;
+    }
+
+    #music-dock-button {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 180px;
+        max-width: 320px;
+        padding: 4px 6px;
+        border-radius: 6px;
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        user-select: none;
+    }
+
+    #music-dock-button:hover,
+    #music-dock-button:focus-visible {
+        background: rgba(74, 158, 255, 0.15);
+        border-color: rgba(74, 158, 255, 0.4);
+        outline: none;
+    }
+
+    #music-dock-button.active {
+        background: rgba(74, 158, 255, 0.3);
+        border-color: rgba(74, 158, 255, 0.6);
+    }
+
+    #music-dock-button .dock-track-title {
+        display: block;
+        font-weight: 500;
+        white-space: nowrap;
+    }
+
+    #music-dock-button .dock-track-title.marquee {
+        display: inline-block;
+        animation: marquee-scroll 10s linear infinite;
+    }
+
+    @keyframes marquee-scroll {
+        0% { transform: translateX(0); }
+        100% { transform: translateX(calc(-50% + 20px)); }
+    }
+
+    #music-dock-button .dock-track-artist {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.7rem;
+        opacity: 0.7;
+    }
+
+    .music-dock-menu,
+    .music-dock-menu.open {
+        right: 8px;
+        left: auto;
+    }
+
+    .music-dock-menu {
+        position: absolute;
+        bottom: 108px;
+        min-width: 320px;
+        max-width: 420px;
+        background: rgba(12, 12, 12, 0.98);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        padding: 12px;
+        z-index: var(--z-taskbar-menus, 10010);
+        backdrop-filter: blur(12px);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        display: none;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .music-dock-menu.open {
+        display: flex;
+    }
+
+    .music-dock-menu-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-bottom: 8px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .music-dock-menu-title {
+        font-size: 0.85rem;
+        color: rgba(255, 255, 255, 0.5);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .music-dock-controls {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+
+    .music-dock-control-btn {
+        min-width: 40px;
+        height: 40px;
+        padding: 0;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 6px;
+        color: rgba(255, 255, 255, 0.85);
+        cursor: pointer;
+        transition: all 0.15s ease;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+    }
+
+    .music-dock-control-btn:hover {
+        background: rgba(255, 255, 255, 0.14);
+        border-color: rgba(255, 255, 255, 0.3);
+        color: #fff;
+    }
+
+    .music-dock-control-btn:active {
+        transform: scale(0.95);
+    }
+
+    .music-dock-control-btn.play-btn {
+        background: rgba(66, 133, 244, 0.2);
+        border-color: rgba(66, 133, 244, 0.4);
+        min-width: 50px;
+    }
+
+    .music-dock-control-btn.play-btn:hover {
+        background: rgba(66, 133, 244, 0.3);
+        border-color: rgba(66, 133, 244, 0.6);
+    }
+
+    .music-dock-expand-btn {
+        width: 100%;
+        padding: 8px 12px;
+        background: rgba(74, 158, 255, 0.15);
+        border: 1px solid rgba(74, 158, 255, 0.3);
+        border-radius: 6px;
+        color: rgba(255, 255, 255, 0.9);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-size: 0.85rem;
+        text-align: center;
+    }
+
+    .music-dock-expand-btn:hover {
+        background: rgba(74, 158, 255, 0.25);
+        border-color: rgba(74, 158, 255, 0.5);
+    }
+
+    .video-player-dock {
+        margin-right: -20px;
+    }
+
+    .video-player-dock.visible {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .video-dock-inline {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+        background: rgba(15, 15, 15, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 6px;
+        padding: 6px 10px;
+        backdrop-filter: blur(8px);
+        max-height: 88px;
+        height: 88px;
+        margin-right: 13px;
+    }
+
+    .video-dock-inline .dock-tab-header {
+        order: 2;
+        flex: 1;
+        min-width: 0;
+        max-width: 420px;
+        overflow: hidden;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        align-items: center;
+        column-gap: 10px;
+        position: relative;
+    }
+
+    /* Allow the dock to shrink to its content (override global music dock min-width). */
+    .video-dock-inline #music-dock-button {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .video-dock-inline .time-display {
+        font-size: 0.76rem;
+        color: rgba(255, 255, 255, 0.92);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    .video-dock-inline .dock-tab-title,
+    .video-dock-inline .dock-tab-content {
+        display: none;
+    }
+
+    .video-dock-inline .dock-tab-track-details {
+        font-size: 0.78rem;
+        color: rgba(255, 255, 255, 0.95);
+        overflow: hidden;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .video-dock-inline .dock-tab-track-details .dock-play-indicator {
+        font-size: 0.85rem;
+        width: 20px;
+        text-align: center;
+        flex-shrink: 0;
+    }
+
+    .video-dock-inline .dock-tab-track-details .dock-track-info {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .video-dock-inline .dock-tab-track-details .dock-track-title,
+    .video-dock-inline .dock-tab-track-details .dock-track-artist {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .video-dock-inline .dock-tab-track-details .dock-track-artist {
+        font-size: 0.7rem;
+        opacity: 0.7;
+    }
+
+    .video-dock-inline .dock-tab-controls {
+        order: 1;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 0;
+        flex-shrink: 0;
+        flex-wrap: wrap;
+    }
+
+    @media (max-width: 720px) {
+        .video-player-dock {
+            margin-right: 0;
+        }
+
+        .video-dock-inline {
+            padding: 4px 4px;
+            margin-right: 0;
+            max-height: 88px;
+        }
+
+        .video-dock-inline .dock-tab-header {
+            max-width: 300px;
+            column-gap: 8px;
+        }
+
+        /* Keep controls on one line and allow horizontal scroll on narrow screens */
+        .video-dock-inline .dock-tab-controls {
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+
+        .video-dock-inline .dock-tab-controls::-webkit-scrollbar {
+            display: none;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .video-dock-inline .dock-tab-header {
+            max-width: 210px;
+            column-gap: 6px;
+        }
+
+        .video-dock-inline .time-display {
+            font-size: 0.72rem;
+        }
+    }
+
+    @media (max-width: 420px) {
+        .video-dock-inline {
+            padding: 2px 2px;
+            gap: 4px;
+        }
+
+        .video-dock-inline .dock-tab-header {
+            max-width: 190px;
+            column-gap: 4px;
+        }
+
+        .video-dock-inline .time-display {
+            font-size: 0.68rem;
+        }
+
+        .video-dock-inline .control-button {
+            padding: 0 2px;
+            min-width: 24px;
+            height: 24px;
+            font-size: 0.72rem;
+        }
+
+        /* Keep the mode menu button from forcing width */
+        #video-dock-mode-menu-button {
+            padding: 0 4px;
+            min-width: 0;
+        }
+    }
+
+    .video-dock-inline .control-button {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 4px;
+        color: rgba(255, 255, 255, 0.85);
+        cursor: pointer;
+        padding: 3px 6px;
+        font-size: 0.75rem;
+        transition: all 0.15s ease;
+        min-width: 28px;
+        height: 26px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .video-dock-inline .control-button:hover {
+        background: rgba(255, 255, 255, 0.15);
+        border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    .video-dock-inline .control-button:active {
+        transform: scale(0.95);
+    }
+
+    /* Menus */
+    .start-menu,
+    .map-menu,
+    .calendar-menu,
+    .music-dock-menu {
+        position: absolute;
+        bottom: 108px;
+        left: 8px;
+        background: rgba(12, 12, 12, 0.98);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        padding: 12px;
+        z-index: var(--z-taskbar-menus, 10010);
+        backdrop-filter: blur(12px);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        display: none;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .start-menu.open,
+    .map-menu.open,
+    .calendar-menu.open,
+    .music-dock-menu.open {
+        display: flex;
+    }
+
+    .start-menu {
+        width: 320px;
+        max-height: 70vh;
+    }
+
+    .calendar-menu {
+        width: 320px;
+        max-width: calc(100% - 32px);
+        gap: 10px;
+    }
+
+    .calendar-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 4px 8px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .calendar-title {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.92);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .calendar-nav {
+        display: inline-flex;
+        gap: 4px;
+        flex-shrink: 0;
+    }
+
+    .calendar-nav button {
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.04);
+        color: rgba(255, 255, 255, 0.75);
+        cursor: pointer;
+        padding: 0;
+    }
+
+    .calendar-nav button:hover {
+        background: rgba(255, 255, 255, 0.12);
+        color: rgba(255, 255, 255, 0.95);
+    }
+
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+        padding: 4px 8px;
+    }
+
+    .calendar-dow {
+        font-size: 0.72rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.55);
+        text-align: center;
+        padding: 4px 0;
+        user-select: none;
+    }
+
+    .calendar-day {
+        height: 34px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        background: rgba(255, 255, 255, 0.04);
+        color: rgba(255, 255, 255, 0.9);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .calendar-day:hover {
+        background: rgba(74, 158, 255, 0.22);
+        border-color: rgba(74, 158, 255, 0.45);
+    }
+
+    .calendar-day.muted {
+        opacity: 0.45;
+    }
+
+    .calendar-day.today {
+        border-color: rgba(74, 158, 255, 0.8);
+        box-shadow: 0 0 10px rgba(74, 158, 255, 0.35);
+    }
+
+    .map-menu {
+        width: 900px;
+        max-width: calc(100% - 32px);
+        height: var(--grid-total-height, 600px);
+        max-height: var(--grid-total-height, 600px);
+    }
+
+    .start-menu-header,
+    .map-menu-section-header {
+        font-size: 0.85rem;
+        color: rgba(255, 255, 255, 0.5);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 4px 8px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        margin-bottom: 4px;
+    }
+
+    .start-menu-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .start-menu-header-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+        flex: 1;
+    }
+
+    .start-menu-workspaces {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+    }
+
+    /* Compact workspace UI when embedded into the Start Menu header */
+    .start-menu-header .workspace-item {
+        width: 28px;
+        height: 28px;
+        border-width: 1px;
+    }
+
+    .start-menu-header .workspace-item .workspace-icon {
+        font-size: 12px;
+    }
+
+    .start-menu-header .workspace-add-btn {
+        width: 28px;
+        height: 28px;
+        border-width: 1px;
+    }
+
+    .start-menu-header .workspace-item .workspace-audio-btn {
+        width: 16px;
+        height: 16px;
+        font-size: 9px;
+        bottom: -3px;
+        right: -3px;
+        border-width: 1px;
+    }
+
+    .start-menu-header .workspace-item .workspace-close-btn {
+        width: 14px;
+        height: 14px;
+        font-size: 9px;
+        top: -3px;
+        left: -3px;
+    }
+
+    .start-menu-title {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .start-menu-close-btn {
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.04);
+        color: rgba(255, 255, 255, 0.7);
+        cursor: pointer;
+        padding: 0;
+        flex-shrink: 0;
+    }
+
+    .start-menu-close-btn:hover {
+        background: rgba(255, 255, 255, 0.12);
+        color: rgba(255, 255, 255, 0.95);
+    }
+
+    .start-menu-items {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        overflow-y: auto;
+        padding: 8px 0;
+    }
+
+    .start-menu-search-wrap {
+        padding: 8px 8px 0;
+    }
+
+    #start-menu-search {
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+        display: block;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.05);
+        color: rgba(255, 255, 255, 0.95);
+        outline: none;
+        font-size: 0.95rem;
+    }
+
+    #start-menu-search:focus {
+        border-color: rgba(74, 158, 255, 0.6);
+        background: rgba(74, 158, 255, 0.08);
+    }
+
+    .start-menu-section {
+        padding: 6px 0 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .start-menu-section:last-child {
+        border-bottom: none;
+    }
+
+    .start-menu-section-heading {
+        font-size: 0.75rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.5);
+        padding: 0 16px 8px;
+    }
+
+    .start-menu-item {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.04);
+        color: rgba(255, 255, 255, 0.9);
+        cursor: pointer;
+        font-size: 0.95rem;
+        text-align: left;
+        transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    }
+
+    .start-menu-item:hover {
+        background: rgba(74, 158, 255, 0.2);
+        border-color: rgba(74, 158, 255, 0.6);
+        color: #fff;
+    }
+
+    .start-menu-icon {
+        font-size: 1rem;
+    }
+
+    .start-menu-submenu-toggle {
+        justify-content: space-between;
+    }
+
+    .start-menu-submenu-toggle .start-menu-label {
+        flex: 1;
+    }
+
+    .start-menu-submenu-caret {
+        opacity: 0.75;
+        margin-left: 8px;
+        font-size: 0.9rem;
+    }
+
+    .start-menu-submenu-items {
+        display: none;
+        padding-left: 12px;
+        margin: 2px 0 6px;
+    }
+
+    .start-menu-submenu-items.open {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .map-menu-sections {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 16px;
+        width: 100%;
+    }
+
+    .map-menu-section {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 0;
+    }
+
+    .map-menu-scrollable {
+        max-height: calc(var(--grid-total-height, 600px) - 140px);
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding-right: 8px;
+    }
+
+    .map-menu-scrollable::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .map-menu-scrollable::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 3px;
+    }
+
+    .map-menu-scrollable::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 3px;
+    }
+
+    .map-menu-scrollable::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    .map-setting-item {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 8px;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 4px;
+        margin-bottom: 8px;
+    }
+
+    .map-setting-item label {
+        font-size: 0.8rem;
+        color: rgba(255, 255, 255, 0.7);
+    }
+
+    .map-setting-item input[type="range"] {
+        width: 100%;
+    }
+
+    .base-layer-item,
+    .overlay-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        color: rgba(255, 255, 255, 0.85);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-size: 0.875rem;
+        margin-bottom: 4px;
+    }
+
+    .base-layer-item:hover,
+    .overlay-item:hover {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.25);
+        color: #fff;
+    }
+
+    .base-layer-item.active {
+        background: rgba(74, 158, 255, 0.25);
+        border-color: #4a9eff;
+        color: #fff;
+    }
+
+    .overlay-item.manual::after {
+        content: 'MANUAL';
+        font-size: 0.65rem;
+        padding: 2px 6px;
+        background: rgba(255, 165, 0, 0.2);
+        border: 1px solid rgba(255, 165, 0, 0.4);
+        border-radius: 3px;
+        margin-left: auto;
+    }
+
+    .overlay-item.manual .overlay-load-btn {
+        padding: 4px 8px;
+        background: rgba(74, 158, 255, 0.2);
+        border: 1px solid rgba(74, 158, 255, 0.4);
+        border-radius: 4px;
+        color: #4a9eff;
+        font-size: 0.75rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .overlay-item.manual .overlay-load-btn:hover {
+        background: rgba(74, 158, 255, 0.35);
+        border-color: #4a9eff;
+    }
+
+    .overlay-item.hidden {
+        display: none;
+    }
+
+    .active-layer-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 6px 10px;
+        background: rgba(74, 158, 255, 0.15);
+        border: 1px solid rgba(74, 158, 255, 0.3);
+        border-radius: 4px;
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 0.8rem;
+        margin-bottom: 4px;
+    }
+
+    .active-layer-item .layer-name {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+    }
+
+    .active-layer-item .remove-btn {
+        background: rgba(255, 70, 70, 0.2);
+        border: 1px solid rgba(255, 70, 70, 0.4);
+        border-radius: 3px;
+        padding: 2px 6px;
+        color: #ff6b6b;
+        cursor: pointer;
+        font-size: 0.7rem;
+        flex-shrink: 0;
+    }
+
+    .active-layer-item .remove-btn:hover {
+        background: rgba(255, 70, 70, 0.35);
+        border-color: #ff6b6b;
+    }
+
+    #gis-layer-search:focus {
+        outline: none;
+        border-color: rgba(74, 158, 255, 0.5);
+        background: rgba(255, 255, 255, 0.08);
+    }
+
+        .map-toggle-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 54px;
+            height: 36px;
+            padding: 0 14px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .map-toggle-btn:hover,
+        .map-toggle-btn.active {
+            background: rgba(74, 158, 255, 0.35);
+            border-color: #4a9eff;
+        }
+
+        .panel-buttons {
+            display: flex;
+            gap: 12px;
+            flex: 1 1 auto;
+            min-width: 0;
+            align-items: stretch;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+
+        .panel-tab-strip {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            min-height: 45px;
+        }
+
+        .panel-tab-strip::-webkit-scrollbar {
+            height: 4px;
+        }
+
+        .panel-tab-strip::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .panel-tab-strip::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+        }
+
+        .panel-tab-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            color: rgba(255, 255, 255, 0.85);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .panel-tab-btn:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .panel-tab-btn .close-btn,
+        .panel-tab-btn .minimize-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 12px;
+            line-height: 1;
+            transition: all 0.15s ease;
+        }
+
+        .panel-tab-btn .close-btn:hover {
+            background: rgba(255, 86, 86, 0.3);
+            color: #fff;
+        }
+
+        .panel-tab-btn .minimize-btn {
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .panel-tab-btn .minimize-btn:hover {
+            background: rgba(255, 200, 86, 0.3);
+            color: #fff;
+        }
+
+        .panel-tab-btn.minimized {
+            background: rgba(255, 255, 255, 0.04);
+            border-color: rgba(255, 255, 255, 0.15);
+            opacity: 0.7;
+        }
+
+        .panel-tab-btn.minimized:hover {
+            opacity: 1;
+        }
+
+        .taskview-grid-container {
+            /* Fill the remaining taskbar space up to the dock. */
+            flex: 1 1 0;
+            min-width: 0;
+            max-height: 90px;
+            overflow: hidden;
+        }
+
+        .taskview-grid {
+            display: grid;
+            grid-template-rows: repeat(2, 45px);
+            grid-auto-flow: column;
+            grid-auto-columns: 250px;
+            gap: 0;
+            width: 100%;
+            min-width: 100%;
+            box-sizing: border-box;
+            height: 90px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            background-image:
+                repeating-linear-gradient(to right, transparent, transparent 249px, rgba(255, 255, 255, 0.15) 249px, rgba(255, 255, 255, 0.15) 250px),
+                repeating-linear-gradient(to bottom, transparent, transparent 44px, rgba(255, 255, 255, 0.15) 44px, rgba(255, 255, 255, 0.15) 45px),
+                linear-gradient(to right, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.15)),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.15));
+            background-size:
+                250px 45px,
+                250px 45px,
+                1px 100%,
+                100% 1px;
+            background-repeat:
+                repeat,
+                repeat,
+                no-repeat,
+                no-repeat;
+            background-position:
+                left top,
+                left top,
+                right top,
+                left bottom;
+            background-attachment:
+                local,
+                local,
+                scroll,
+                scroll;
+        }
+
+        .taskview-tile {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: rgba(255, 255, 255, 0.88);
+            font-size: 0.85rem;
+            transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+            min-width: 0;
+        }
+
+        .taskview-tile:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.35);
+        }
+
+        .taskview-tile.active {
+            border-color: #4a9eff;
+            background: rgba(74, 158, 255, 0.16);
+            box-shadow: 0 0 0 1px rgba(74, 158, 255, 0.25);
+        }
+
+        .taskview-tile-info {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 2px;
+            padding: 2px 0;
+            cursor: pointer;
+            min-width: 0;
+            flex: 1;
+        }
+
+        .taskview-tile-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+        }
+
+        .taskview-icon {
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+
+        .taskview-label {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-weight: 500;
+            font-size: 0.8rem;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .taskview-popover {
+            position: fixed;
+            z-index: var(--z-taskbar-popups, 10200);
+            min-width: 170px;
+            max-width: 240px;
+            background: rgba(15, 15, 15, 0.96);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            padding: 6px;
+            display: none;
+        }
+
+        .taskview-popover.open {
+            display: block;
+        }
+
+        .taskview-popover .popover-btn {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border: none;
+            background: transparent;
+            color: rgba(255, 255, 255, 0.9);
+            cursor: pointer;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            text-align: left;
+        }
+
+        .taskview-popover .popover-btn:hover {
+            background: rgba(74, 158, 255, 0.18);
+        }
+
+        .taskview-popover .popover-btn.danger:hover {
+            background: rgba(235, 87, 87, 0.22);
+        }
+
+        .taskview-popover .popover-icon {
+            width: 18px;
+            display: inline-flex;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .music-dock-menu-track {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+        }
+
+        .music-dock-menu-track-title {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.95);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .music-dock-menu-track-artist {
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.7);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .music-dock-menu-track-time {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .map-menu-placeholder {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 0.85rem;
+            padding: 8px;
+        }
+
+        .video-dock-container {
+            display: flex;
+            align-items: stretch;
+            gap: 8px;
+            margin-left: 8px;
+        }
+
+        .video-dock-container.hidden {
+            display: none;
+        }
+
+        .dock-chip {
+            min-width: 220px;
+            background: rgba(15, 15, 15, 0.92);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .dock-chip-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            background: rgba(255, 255, 255, 0.05);
+            cursor: pointer;
+        }
+
+        .dock-chip-icon {
+            font-size: 0.9rem;
+        }
+
+        .dock-chip-label {
+            font-size: 0.8rem;
+            font-weight: 500;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .dock-chip-mode {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .dock-chip-actions {
+            display: inline-flex;
+            gap: 4px;
+        }
+
+        .dock-chip-actions button {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            color: rgba(255, 255, 255, 0.8);
+            cursor: pointer;
+            width: 24px;
+            height: 24px;
+            font-size: 0.75rem;
+        }
+
+        .dock-chip-actions button:hover {
+            background: rgba(74, 158, 255, 0.25);
+            border-color: #4a9eff;
+        }
+
+        .dock-chip-body {
+            padding: 6px;
+            min-height: 42px;
+        }
+
+        .video-dock-inline {
+            position: relative;
+        }
+
+        .video-dock-mode-menu {
+            position: absolute;
+            right: 10px;
+            bottom: calc(100% + 8px);
+            min-width: 200px;
+            background: rgba(15, 15, 15, 0.96);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 10px;
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+            padding: 6px;
+            display: none;
+            z-index: 50;
+        }
+
+        .video-dock-mode-menu.open {
+            display: block;
+        }
+
+        .video-dock-mode-menu button {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            background: transparent;
+            border: none;
+            color: rgba(255, 255, 255, 0.9);
+            cursor: pointer;
+            font-size: 0.85rem;
+            text-align: left;
+        }
+
+        .video-dock-mode-menu button:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .video-dock-mode-menu .video-dock-mode-hint {
+            font-size: 0.72rem;
+            color: rgba(255, 255, 255, 0.55);
+        }
+
+        /* Dock chips live inside the taskbar shadow via video-dock-container */
+</style>
+
+<!-- Taskbar DOM Structure -->
+<div class="taskbar">
+    <div class="taskbar-carousel" id="taskbar-carousel" aria-label="Taskbar">
+        <div class="taskbar-page taskbar-page-home" aria-label="Home">
+            <div class="taskbar-corner" aria-label="Taskbar corner">
+                <button class="taskbar-clock" id="taskbar-clock" type="button" aria-label="Date and time" title="Open calendar"></button>
+                <button class="start-menu-btn" id="start-menu-btn" title="Open menu" type="button">Menu</button>
+                <button class="corner-btn" id="playlist-visualizer-btn" title="Toggle playlist visualizer" type="button" aria-label="Toggle playlist visualizer"><span aria-hidden="true">♪</span></button>
+            </div>
+
+            <div class="video-player-dock" id="video-player-dock" aria-live="polite">
+                <div class="video-dock-inline">
+                    <div class="dock-tab-controls">
+                        <button id="video-dock-prev-button" class="control-button" aria-label="Previous track" title="Previous track">⏮</button>
+                        <button id="video-dock-play-pause-button" class="control-button" aria-label="Play/Pause" title="Play/Pause">▶</button>
+                        <button id="video-dock-next-button" class="control-button" aria-label="Next track" title="Next track">⏭</button>
+                        <xavi-volume-control id="video-dock-volume-control" storage-key="myVolume" source="taskbar-video-dock" label="Volume" compact></xavi-volume-control>
+                        <button id="video-dock-mode-menu-button" class="control-button" aria-label="Video player mode" title="Video player mode">☰</button>
+                        <button id="video-dock-close-button" class="control-button danger" aria-label="Close player" title="Close player">✕</button>
+                    </div>
+                    <div class="video-dock-mode-menu" id="video-dock-mode-menu" role="menu" aria-label="Video player modes">
+                        <button id="video-dock-menu-mini" type="button" data-video-mode="mini">Mini <span class="video-dock-mode-hint">floating</span></button>
+                        <button id="video-dock-menu-expanded" type="button" data-video-mode="expanded">Expanded <span class="video-dock-mode-hint">floating</span></button>
+                        <button id="video-dock-menu-grid-layer" type="button" data-video-mode="grid-layer">Grid <span class="video-dock-mode-hint">layer</span></button>
+                    </div>
+                    <div class="dock-tab-header">
+                        <span id="video-dock-time-display" class="time-display">0:00 / 0:00</span>
+                        <div 
+                            class="dock-tab-track-details"
+                            id="music-dock-button"
+                            role="button"
+                            tabindex="0"
+                            aria-haspopup="true"
+                            aria-expanded="false"
+                            title="Show music controls"
+                        >
+                            <span class="dock-play-indicator" id="dock-play-indicator">▶</span>
+                            <div class="dock-track-info">
+                                <span class="dock-track-title" id="dock-track-title">No track</span>
+                                <span class="dock-track-artist" id="dock-track-artist">Select a song</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="taskbar-page taskbar-page-apps" aria-label="Open applications">
+            <div class="taskview-grid-container">
+                <div class="taskview-grid empty" id="taskview-grid" aria-live="polite"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="taskview-popover" id="taskview-popover" role="menu" aria-label="Task actions"></div>
+    <div class="video-dock-container hidden" id="video-dock-container" aria-live="polite"></div>
+</div>
+
+<!-- Start Menu -->
+<div class="start-menu" id="start-menu">
+    <div class="start-menu-header">
+        <div class="start-menu-header-left">
+            <span class="start-menu-title">Menu</span>
+            <div class="start-menu-workspaces" aria-label="Workspaces">
+                <div class="workspace-items" id="workspace-items"></div>
+                <button class="workspace-add-btn" id="workspace-add-btn" title="Add new workspace">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="12" y1="8" x2="12" y2="16"></line>
+                        <line x1="8" y1="12" x2="16" y2="12"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <button class="start-menu-close-btn" id="start-menu-close-btn" type="button" title="Close menu" aria-label="Close menu">✕</button>
+    </div>
+    <div class="start-menu-search-wrap">
+        <input type="text" id="start-menu-search" placeholder="Search apps…" autocomplete="off" spellcheck="false" />
+    </div>
+    <div class="start-menu-items" id="start-menu-sections"></div>
+</div>
+
+<!-- Calendar -->
+<div class="calendar-menu" id="calendar-menu" role="dialog" aria-label="Calendar"></div>
+
+<!-- Map Menu -->
+<div class="map-menu" id="map-menu">
+    <div class="map-menu-sections">
+        <div class="map-menu-section">
+            <div class="map-menu-section-header">Map Settings</div>
+            <div class="map-setting-item">
+                <label for="map-opacity-slider">Map Opacity: <span id="map-opacity-value">100%</span></label>
+                <input type="range" id="map-opacity-slider" min="0" max="100" value="100">
+            </div>
+            <button id="transit-toggle-btn" class="map-toggle-btn" style="width:100%; margin-top:10px;">🚌 Toggle Transit Routes</button>
+            <div class="map-menu-section-header" style="margin-top:12px;">Base Maps</div>
+            <div id="base-layers-list"></div>
+        </div>
+        <div class="map-menu-section">
+            <div class="map-menu-section-header">Active Layers</div>
+            <div class="map-menu-scrollable" id="active-layers-list">
+                <div class="map-menu-placeholder">No layers active</div>
+            </div>
+        </div>
+        <div class="map-menu-section">
+            <div class="map-menu-section-header">GIS Layers</div>
+            <input type="text" id="gis-layer-search" placeholder="Search layers...">
+            <div class="map-menu-scrollable" id="overlays-list"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Music Dock Menu -->
+<div class="music-dock-menu" id="music-dock-menu">
+    <div class="music-dock-menu-header">
+        <span class="music-dock-menu-title">Now Playing</span>
+    </div>
+    <div class="music-dock-menu-track">
+        <span class="music-dock-menu-track-title" id="dock-menu-track-title">No track playing</span>
+        <span class="music-dock-menu-track-artist" id="dock-menu-track-artist">Select a song to start</span>
+        <span class="music-dock-menu-track-time" id="dock-track-time">0:00 / 0:00</span>
+    </div>
+    <div class="music-dock-controls">
+        <button class="music-dock-control-btn" id="dock-prev-btn" title="Previous track">⏮</button>
+        <button class="music-dock-control-btn play-btn" id="dock-play-pause-btn" title="Play/Pause">▶</button>
+        <button class="music-dock-control-btn" id="dock-next-btn" title="Next track">⏭</button>
+        <xavi-volume-control id="dock-volume-control" storage-key="myVolume" source="taskbar-music-dock" label="Volume" compact></xavi-volume-control>
+    </div>
+    <button class="music-dock-expand-btn" id="dock-expand-btn">⬆ Show Full Player</button>
+</div>

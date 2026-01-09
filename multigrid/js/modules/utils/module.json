@@ -1,0 +1,17 @@
+{
+  "name": "utils",
+  "version": "1.0.0",
+  "displayName": "Utilities",
+  "description": "Shared utilities and state management",
+  "dependencies": [],
+  "scripts": [
+    "volume-control.js",
+    "shared-state-manager.js",
+    "heartbeat.js",
+    "panel-registry.js"
+  ],
+  "components": [],
+  "exports": {
+    "stateManager": "window.stateSync"
+  }
+}
