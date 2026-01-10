@@ -1,8 +1,5 @@
 <!-- Taskbar Shadow DOM Template -->
 <style>
-    @import url('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
-</style>
-<style>
     :host {
         display: block;
         position: absolute;
@@ -926,7 +923,6 @@
 
     /* Menus */
     .start-menu,
-    .map-menu,
     .calendar-menu,
     .music-dock-menu {
         position: absolute;
@@ -945,7 +941,6 @@
     }
 
     .start-menu.open,
-    .map-menu.open,
     .calendar-menu.open,
     .music-dock-menu.open {
         display: flex;
@@ -1049,15 +1044,13 @@
         box-shadow: 0 0 10px rgba(74, 158, 255, 0.35);
     }
 
-    .map-menu {
-        width: 900px;
-        max-width: calc(100% - 32px);
+        .taskview-popover,
+        .calendar-menu {
         height: var(--grid-total-height, 600px);
         max-height: var(--grid-total-height, 600px);
     }
 
-    .start-menu-header,
-    .map-menu-section-header {
+    .start-menu-header {
         font-size: 0.85rem;
         color: rgba(255, 255, 255, 0.5);
         text-transform: uppercase;
@@ -1147,292 +1140,8 @@
 
     .start-menu-close-btn:hover {
         background: rgba(255, 255, 255, 0.12);
-        color: rgba(255, 255, 255, 0.95);
-    }
-
-    .start-menu-items {
-        display: flex;
-        flex-direction: column;
-        gap: 0;
-        overflow-y: auto;
-        padding: 8px 0;
-    }
-
-    .start-menu-search-wrap {
-        padding: 8px 8px 0;
-    }
-
-    #start-menu-search {
-        width: 100%;
-        max-width: 100%;
-        box-sizing: border-box;
-        display: block;
-        padding: 10px 12px;
-        border-radius: 8px;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        background: rgba(255, 255, 255, 0.05);
-        color: rgba(255, 255, 255, 0.95);
-        outline: none;
-        font-size: 0.95rem;
-    }
-
-    #start-menu-search:focus {
-        border-color: rgba(74, 158, 255, 0.6);
-        background: rgba(74, 158, 255, 0.08);
-    }
-
-    .start-menu-section {
-        padding: 6px 0 12px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    }
-
-    .start-menu-section:last-child {
-        border-bottom: none;
-    }
-
-    .start-menu-section-heading {
-        font-size: 0.75rem;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: rgba(255, 255, 255, 0.5);
-        padding: 0 16px 8px;
-    }
-
-    .start-menu-item {
-        width: 100%;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 10px 14px;
-        border-radius: 8px;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        background: rgba(255, 255, 255, 0.04);
-        color: rgba(255, 255, 255, 0.9);
-        cursor: pointer;
-        font-size: 0.95rem;
-        text-align: left;
-        transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
-    }
-
-    .start-menu-item:hover {
-        background: rgba(74, 158, 255, 0.2);
-        border-color: rgba(74, 158, 255, 0.6);
-        color: #fff;
-    }
-
-    .start-menu-icon {
-        font-size: 1rem;
-    }
-
-    .start-menu-submenu-toggle {
-        justify-content: space-between;
-    }
-
-    .start-menu-submenu-toggle .start-menu-label {
-        flex: 1;
-    }
-
-    .start-menu-submenu-caret {
-        opacity: 0.75;
-        margin-left: 8px;
-        font-size: 0.9rem;
-    }
-
-    .start-menu-submenu-items {
-        display: none;
-        padding-left: 12px;
-        margin: 2px 0 6px;
-    }
-
-    .start-menu-submenu-items.open {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-    }
-
-    .map-menu-sections {
-        display: grid;
-        grid-template-columns: 1fr 1fr 1fr;
-        gap: 16px;
-        width: 100%;
-    }
-
-    .map-menu-section {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        min-width: 0;
-    }
-
-    .map-menu-scrollable {
-        max-height: calc(var(--grid-total-height, 600px) - 140px);
-        overflow-y: auto;
-        overflow-x: hidden;
-        padding-right: 8px;
-    }
-
-    .map-menu-scrollable::-webkit-scrollbar {
-        width: 6px;
-    }
-
-    .map-menu-scrollable::-webkit-scrollbar-track {
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 3px;
-    }
-
-    .map-menu-scrollable::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.2);
-        border-radius: 3px;
-    }
-
-    .map-menu-scrollable::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.3);
-    }
-
-    .map-setting-item {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        padding: 8px;
-        background: rgba(255, 255, 255, 0.03);
-        border-radius: 4px;
-        margin-bottom: 8px;
-    }
-
-    .map-setting-item label {
-        font-size: 0.8rem;
-        color: rgba(255, 255, 255, 0.7);
-    }
-
-    .map-setting-item input[type="range"] {
-        width: 100%;
-    }
-
-    .base-layer-item,
-    .overlay-item {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 8px 12px;
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 6px;
-        color: rgba(255, 255, 255, 0.85);
-        cursor: pointer;
-        transition: all 0.2s ease;
-        font-size: 0.875rem;
         margin-bottom: 4px;
     }
-
-    .base-layer-item:hover,
-    .overlay-item:hover {
-        background: rgba(255, 255, 255, 0.12);
-        border-color: rgba(255, 255, 255, 0.25);
-        color: #fff;
-    }
-
-    .base-layer-item.active {
-        background: rgba(74, 158, 255, 0.25);
-        border-color: #4a9eff;
-        color: #fff;
-    }
-
-    .overlay-item.manual::after {
-        content: 'MANUAL';
-        font-size: 0.65rem;
-        padding: 2px 6px;
-        background: rgba(255, 165, 0, 0.2);
-        border: 1px solid rgba(255, 165, 0, 0.4);
-        border-radius: 3px;
-        margin-left: auto;
-    }
-
-    .overlay-item.manual .overlay-load-btn {
-        padding: 4px 8px;
-        background: rgba(74, 158, 255, 0.2);
-        border: 1px solid rgba(74, 158, 255, 0.4);
-        border-radius: 4px;
-        color: #4a9eff;
-        font-size: 0.75rem;
-        cursor: pointer;
-        transition: all 0.2s ease;
-    }
-
-    .overlay-item.manual .overlay-load-btn:hover {
-        background: rgba(74, 158, 255, 0.35);
-        border-color: #4a9eff;
-    }
-
-    .overlay-item.hidden {
-        display: none;
-    }
-
-    .active-layer-item {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        padding: 6px 10px;
-        background: rgba(74, 158, 255, 0.15);
-        border: 1px solid rgba(74, 158, 255, 0.3);
-        border-radius: 4px;
-        color: rgba(255, 255, 255, 0.9);
-        font-size: 0.8rem;
-        margin-bottom: 4px;
-    }
-
-    .active-layer-item .layer-name {
-        flex: 1;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        min-width: 0;
-    }
-
-    .active-layer-item .remove-btn {
-        background: rgba(255, 70, 70, 0.2);
-        border: 1px solid rgba(255, 70, 70, 0.4);
-        border-radius: 3px;
-        padding: 2px 6px;
-        color: #ff6b6b;
-        cursor: pointer;
-        font-size: 0.7rem;
-        flex-shrink: 0;
-    }
-
-    .active-layer-item .remove-btn:hover {
-        background: rgba(255, 70, 70, 0.35);
-        border-color: #ff6b6b;
-    }
-
-    #gis-layer-search:focus {
-        outline: none;
-        border-color: rgba(74, 158, 255, 0.5);
-        background: rgba(255, 255, 255, 0.08);
-    }
-
-        .map-toggle-btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 54px;
-            height: 36px;
-            padding: 0 14px;
-            border-radius: 6px;
-            border: 1px solid rgba(255, 255, 255, 0.25);
-            background: rgba(255, 255, 255, 0.05);
-            color: #fff;
-            font-size: 0.85rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .map-toggle-btn:hover,
-        .map-toggle-btn.active {
-            background: rgba(74, 158, 255, 0.35);
-            border-color: #4a9eff;
-        }
 
         .panel-buttons {
             display: flex;
@@ -1709,12 +1418,6 @@
             color: rgba(255, 255, 255, 0.6);
         }
 
-        .map-menu-placeholder {
-            color: rgba(255, 255, 255, 0.4);
-            font-size: 0.85rem;
-            padding: 8px;
-        }
-
         .video-dock-container {
             display: flex;
             align-items: stretch;
@@ -1924,33 +1627,6 @@
 
 <!-- Calendar -->
 <div class="calendar-menu" id="calendar-menu" role="dialog" aria-label="Calendar"></div>
-
-<!-- Map Menu -->
-<div class="map-menu" id="map-menu">
-    <div class="map-menu-sections">
-        <div class="map-menu-section">
-            <div class="map-menu-section-header">Map Settings</div>
-            <div class="map-setting-item">
-                <label for="map-opacity-slider">Map Opacity: <span id="map-opacity-value">100%</span></label>
-                <input type="range" id="map-opacity-slider" min="0" max="100" value="100">
-            </div>
-            <button id="transit-toggle-btn" class="map-toggle-btn" style="width:100%; margin-top:10px;">🚌 Toggle Transit Routes</button>
-            <div class="map-menu-section-header" style="margin-top:12px;">Base Maps</div>
-            <div id="base-layers-list"></div>
-        </div>
-        <div class="map-menu-section">
-            <div class="map-menu-section-header">Active Layers</div>
-            <div class="map-menu-scrollable" id="active-layers-list">
-                <div class="map-menu-placeholder">No layers active</div>
-            </div>
-        </div>
-        <div class="map-menu-section">
-            <div class="map-menu-section-header">GIS Layers</div>
-            <input type="text" id="gis-layer-search" placeholder="Search layers...">
-            <div class="map-menu-scrollable" id="overlays-list"></div>
-        </div>
-    </div>
-</div>
 
 <!-- Music Dock Menu -->
 <div class="music-dock-menu" id="music-dock-menu">

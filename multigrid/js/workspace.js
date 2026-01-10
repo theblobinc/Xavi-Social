@@ -128,6 +128,11 @@ class XaviMultiGridWorkspace extends HTMLElement {
             this.setAttribute('aria-label', 'Xavi Multi Grid Workspace');
         }
         this.dataset.workspace = 'xavi-multi-grid';
+
+        const basePath = this.getAttribute('data-base-path');
+        if (basePath) {
+            this.dataset.basePath = basePath;
+        }
         
         // Move all light DOM children into shadow DOM
         this.render();
@@ -135,7 +140,6 @@ class XaviMultiGridWorkspace extends HTMLElement {
         // Store references to key elements
         this.contentArea = this.shadowRoot.getElementById('content-area');
         this.bgLayer = this.shadowRoot.querySelector('.xavi-bg-layer');
-        this.mapElement = this.shadowRoot.getElementById('xavi-map');
         this.gridElement = this.shadowRoot.getElementById('workspace-grid');
         this.floatingLayer = this.shadowRoot.getElementById('floating-panel-layer');
         
@@ -231,26 +235,6 @@ class XaviMultiGridWorkspace extends HTMLElement {
                 pointer-events: auto;
             }
 
-            #xavi-map {
-                position: absolute;
-                inset: 0;
-                width: 100%;
-                height: 100%;
-                z-index: 5;
-                pointer-events: auto;
-                overflow: hidden;
-                background: #1a1a1a;
-                contain: layout paint;
-            }
-
-            #xavi-map * {
-                --tab-cell-size: initial;
-                --tab-grid-gap: initial;
-                --tab-grid-step: initial;
-                --tab-grid-columns: initial;
-                --tab-grid-rows: initial;
-            }
-
             #workspace-grid {
                 position: absolute;
                 inset: 0;
@@ -267,26 +251,6 @@ class XaviMultiGridWorkspace extends HTMLElement {
                 background-repeat: repeat;
             }
 
-            #xavi-map-controls {
-                position: absolute;
-                top: 12px;
-                left: 12px;
-                z-index: 50;
-                display: flex;
-                gap: 8px;
-                align-items: center;
-                pointer-events: none;
-                opacity: 0;
-                transform: translateY(-12px);
-                transition: opacity 0.2s ease, transform 0.2s ease;
-                background: rgba(12, 12, 12, 0.78);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                padding: 6px 10px;
-                border-radius: 999px;
-                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
-                flex-wrap: wrap;
-            }
-
             .floating-panel-layer {
                 position: absolute;
                 top: 0;
@@ -300,49 +264,6 @@ class XaviMultiGridWorkspace extends HTMLElement {
             .floating-panel-layer > * {
                 position: absolute;
                 pointer-events: auto;
-            }
-
-            #xavi-map-controls.map-controls-visible {
-                opacity: 1;
-                pointer-events: auto;
-                transform: translateY(0);
-            }
-
-            #xavi-map-controls select,
-            #xavi-map-controls label,
-            #xavi-map-controls button {
-                background: rgba(12, 12, 12, 0.9);
-                color: #fff;
-                border: 1px solid rgba(255, 255, 255, 0.08);
-                padding: 6px 8px;
-                border-radius: 8px;
-                font-size: 0.85rem;
-            }
-
-            #xavi-map-controls .overlay-list {
-                max-height: 220px;
-                overflow: auto;
-                border-radius: 8px;
-                padding: 6px;
-                display: none;
-                flex-direction: column;
-                gap: 6px;
-                background: rgba(5, 5, 5, 0.9);
-            }
-
-            #xavi-map-controls .overlay-list.active {
-                display: flex;
-            }
-
-            #xavi-map-controls .toggle-overlay-btn,
-            #xavi-map-controls .map-size-btn {
-                cursor: pointer;
-                white-space: nowrap;
-            }
-
-            .xavi-multi-grid.map-hidden #xavi-map {
-                opacity: 0;
-                pointer-events: none;
             }
 
             ::slotted(music-player) {
@@ -392,17 +313,8 @@ class XaviMultiGridWorkspace extends HTMLElement {
         const bgLayer = document.createElement('div');
         bgLayer.className = 'xavi-bg-layer';
 
-        const map = document.createElement('div');
-        map.id = 'xavi-map';
-        const basePath = this.getAttribute('data-base-path');
-        if (basePath) {
-            map.dataset.basePath = basePath;
-        }
-
         const grid = document.createElement('div');
         grid.id = 'workspace-grid';
-
-        bgLayer.appendChild(map);
         bgLayer.appendChild(grid);
         contentArea.appendChild(bgLayer);
         container.appendChild(contentArea);
@@ -412,76 +324,10 @@ class XaviMultiGridWorkspace extends HTMLElement {
         floatingLayer.className = 'floating-panel-layer';
         container.appendChild(floatingLayer);
 
-        const mapControls = document.createElement('div');
-        mapControls.id = 'xavi-map-controls';
-
-        const basemapSelect = document.createElement('select');
-        basemapSelect.id = 'xavi-basemap-select';
-        basemapSelect.setAttribute('title', 'Select base map');
-
-        const basemapOptions = [
-            { value: 'osm', label: 'OpenStreetMap', disabled: false, title: '' },
-            { value: 'esri', label: 'Esri World Imagery (satellite)', disabled: false, title: '' },
-            { value: 'stamen', label: 'Stamen Toner', disabled: false, title: '' },
-            { value: 'google', label: 'Google Maps (requires API key)', disabled: true, title: 'Google Maps requires an API key and backend support' }
-        ];
-
-        basemapOptions.forEach(opt => {
-            const optionEl = document.createElement('option');
-            optionEl.value = opt.value;
-            optionEl.textContent = opt.label;
-            if (opt.disabled) optionEl.disabled = true;
-            if (opt.title) optionEl.title = opt.title;
-            basemapSelect.appendChild(optionEl);
-        });
-
-        mapControls.appendChild(basemapSelect);
-
-        const overlayControls = document.createElement('div');
-
-        const overlayToggleBtn = document.createElement('button');
-        overlayToggleBtn.id = 'toggle-overlay-list';
-        overlayToggleBtn.className = 'toggle-overlay-btn';
-        overlayToggleBtn.type = 'button';
-        overlayToggleBtn.title = 'Toggle overlay list';
-        overlayToggleBtn.textContent = 'Layers';
-
-        const overlayList = document.createElement('div');
-        overlayList.id = 'overlay-list';
-        overlayList.className = 'overlay-list';
-
-        overlayControls.appendChild(overlayToggleBtn);
-        overlayControls.appendChild(overlayList);
-        mapControls.appendChild(overlayControls);
-
-        const mapSizeBtn = document.createElement('button');
-        mapSizeBtn.id = 'map-size-btn';
-        mapSizeBtn.className = 'map-size-btn';
-        mapSizeBtn.type = 'button';
-        mapSizeBtn.title = 'Toggle map height';
-        mapSizeBtn.textContent = 'Minimize Map';
-
-        const mapVisibilityBtn = document.createElement('button');
-        mapVisibilityBtn.id = 'map-visibility-btn';
-        mapVisibilityBtn.className = 'map-visibility-btn';
-        mapVisibilityBtn.type = 'button';
-        mapVisibilityBtn.title = 'Hide map';
-        mapVisibilityBtn.textContent = 'Hide Map';
-
-        mapControls.appendChild(mapSizeBtn);
-        mapControls.appendChild(mapVisibilityBtn);
-
-        container.appendChild(mapControls);
-
         const slot = document.createElement('slot');
         container.appendChild(slot);
 
-        const leafletStylesheet = document.createElement('link');
-        leafletStylesheet.rel = 'stylesheet';
-        leafletStylesheet.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-
         this.shadowRoot.appendChild(style);
-        this.shadowRoot.appendChild(leafletStylesheet);
         this.shadowRoot.appendChild(container);
     }
 
@@ -623,10 +469,6 @@ class XaviMultiGridWorkspace extends HTMLElement {
         return this.bgLayer;
     }
 
-    getMapElement() {
-        return this.mapElement;
-    }
-
     getGridElement() {
         return this.gridElement;
     }
@@ -670,7 +512,6 @@ class XaviMultiGridWorkspace extends HTMLElement {
 
         applySize(this.contentArea);
         applySize(this.bgLayer);
-        applySize(this.mapElement);
         applySize(this.gridElement);
     }
 }

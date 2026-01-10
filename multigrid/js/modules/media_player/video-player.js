@@ -3219,7 +3219,7 @@ class VideoPlayer extends HTMLElement {
         this.isTaskbarDocked = false;
         this.lastActiveMode = 'expanded';
 
-        // Force background stacking: behind GIS map and grid overlays.
+        // Force background stacking: behind background and grid overlays.
         this.style.zIndex = '0';
         this.style.position = 'absolute';
         this.style.inset = '0';

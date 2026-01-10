@@ -168,10 +168,6 @@ $multiGridBaseUrl = $baseUrl . '/packages/xavi_social/multigrid';
 					return $item !== '.' && $item !== '..' && is_dir($modulesDir . '/' . $item);
 				});
 				foreach ($moduleDirs as $moduleDir) {
-					// Disable the map/GIS module in the social engine.
-					if ($moduleDir === 'gis') {
-						continue;
-					}
 					$configFile = $modulesDir . '/' . $moduleDir . '/module.json';
 					if (file_exists($configFile)) {
 						$config = json_decode((string) file_get_contents($configFile), true);

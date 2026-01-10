@@ -49,28 +49,13 @@ class Taskbar extends HTMLElement {
         this._updatingGridMetrics = false;
         this.userIsAdmin = false;
         this.userStatusChecked = false;
-        this.mapControlsVisible = false;
         this.overlayGeometryMinInterval = 120;
         this.overlayGeometryLastUpdate = 0;
         this.overlayGeometryDelayHandle = null;
-        this.overlayList = null;
-        this.overlayToggleBtn = null;
-        this.overlayListVisible = false;
-        this.mapSizeBtn = null;
-        this.mapVisibilityBtn = null;
         this.tabSystem = null;
-        // Always start expanded and DO NOT use localStorage for map size
-        this.mapSizeMode = 'expanded';
-        this._mapResizeRaf = null;
-        this._lastMapInvalidate = 0;
         this.minBackgroundHeight = 480;
         this.defaultBackgroundHeight = this.minBackgroundHeight;
         this.backgroundHeight = this.minBackgroundHeight;
-        this.backgroundHeightBeforeHide = this.minBackgroundHeight;
-        // Default: map hidden unless user explicitly enables it.
-        this.mapHidden = true;
-        this.mapHiddenKey = 'pgmusic.mapHidden';
-        this._lastMapElement = null;
         this.taskViewEntries = new Map();
         this.taskViewElementMap = new WeakMap();
         this.activeTaskviewId = null;
@@ -443,12 +428,6 @@ class Taskbar extends HTMLElement {
     initAfterWorkspace() {
         this.cacheControls();
         this.startTaskbarClock();
-        console.log('[TASKBAR INIT] About to load saved map visibility');
-        this.loadSavedMapVisibility();
-        console.log('[TASKBAR INIT] About to apply map size mode');
-        this.applyMapSizeMode();
-        console.log('[TASKBAR INIT] About to apply map visibility');
-        this.applyMapVisibility();
         this.initDockingLayer();
         this.initWorkspaceManager();
         this.captureSpecialComponents();
@@ -641,18 +620,6 @@ class Taskbar extends HTMLElement {
         this.startMenuItems = this.shadowRoot.getElementById('start-menu-sections')
             || this.shadowRoot.getElementById('start-menu-items');
         this.calendarMenu = this.shadowRoot.getElementById('calendar-menu');
-        this.mapMenuBtn = this.shadowRoot.getElementById('map-menu-btn');
-        this.mapMenu = this.shadowRoot.getElementById('map-menu');
-        this.baseLayersList = this.shadowRoot.getElementById('base-layers-list');
-        this.overlaysList = this.shadowRoot.getElementById('overlays-list');
-        this.mapToggleBtn = this.shadowRoot.getElementById('map-toggle-btn');
-
-        const workspaceRoot = this.workspace?.shadowRoot || null;
-        this.mapControls = workspaceRoot?.getElementById('xavi-map-controls') || null;
-        this.overlayList = workspaceRoot?.getElementById('overlay-list') || null;
-        this.overlayToggleBtn = workspaceRoot?.getElementById('toggle-overlay-list') || null;
-        this.mapSizeBtn = workspaceRoot?.getElementById('map-size-btn') || null;
-        this.mapVisibilityBtn = workspaceRoot?.getElementById('map-visibility-btn') || null;
         this.busToggleBtn = this.shadowRoot.getElementById('bus-toggle-btn');
         this.videoDockContainer = this.shadowRoot.getElementById('video-dock-container');
         
@@ -661,12 +628,8 @@ class Taskbar extends HTMLElement {
             this.contentArea = this.workspace.getContentArea();
             this.tabSystem = this.contentArea?.parentElement; // .xavi-multi-grid
         }
-
-        if (this.mapControls) {
-            this.setMapControlsVisibility(false);
-        }
         
-        // Position menus above taskbar and set map height
+        // Position menus above taskbar and set background height
         this.updateMenuPositions();
         
         // Music dock controls
@@ -1607,8 +1570,6 @@ class Taskbar extends HTMLElement {
         this.applyOverlayWidth(containerRect);
 
         // Toggle tab positioning is now handled by updatePlaylistTogglePosition
-
-        this.invalidateMapSize();
     }
 
     togglePlaylistOverlay() {
@@ -2077,62 +2038,6 @@ class Taskbar extends HTMLElement {
             });
         }
         
-        // Prevent map menu from closing when clicking inside it
-        if (this.mapMenu) {
-            this.mapMenu.addEventListener('click', (e) => {
-                e.stopPropagation();
-            });
-        }
-        
-        // Map opacity slider
-        const mapOpacitySlider = this.shadowRoot.getElementById('map-opacity-slider');
-        const mapOpacityValue = this.shadowRoot.getElementById('map-opacity-value');
-        if (mapOpacitySlider && mapOpacityValue) {
-            mapOpacitySlider.addEventListener('input', (e) => {
-                const opacity = e.target.value / 100;
-                mapOpacityValue.textContent = e.target.value + '%';
-                const bgLayer = this.contentArea?.querySelector('.xavi-bg-layer');
-                if (bgLayer) {
-                    bgLayer.style.opacity = opacity;
-                }
-            });
-        }
-        
-        // Transit toggle button (in map menu - keep for compatibility)
-        const transitToggleBtn = this.shadowRoot.getElementById('transit-toggle-btn');
-        if (transitToggleBtn) {
-            transitToggleBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (typeof window.xaviToggleTransitLayers === 'function') {
-                    window.xaviToggleTransitLayers();
-                    transitToggleBtn.style.background = 'rgba(0,102,255,0.4)';
-                    setTimeout(() => {
-                        transitToggleBtn.style.background = 'rgba(0,102,255,0.2)';
-                    }, 200);
-                }
-            });
-        }
-        
-        // map controls toggle moved into Start menu
-        if (this.overlayToggleBtn) {
-            this.overlayToggleBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.toggleOverlayList();
-            });
-        }
-        if (this.mapSizeBtn) {
-            this.mapSizeBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.toggleMapSizeMode();
-            });
-        }
-        if (this.mapVisibilityBtn) {
-            this.mapVisibilityBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.toggleMapVisibility();
-            });
-        }
-        
         // Close start menu when clicking outside
         document.addEventListener('click', (e) => {
             const path = typeof e.composedPath === 'function' ? e.composedPath() : null;
@@ -2148,16 +2053,6 @@ class Taskbar extends HTMLElement {
                 !this.startMenu.contains(e.target) && 
                 !this.startMenuBtn?.contains(e.target)) {
                 this.closeStartMenu();
-            }
-            if (this.mapMenu &&
-                !this.mapMenu.contains(e.target) &&
-                !this.mapMenuBtn?.contains(e.target)) {
-                this.closeMapMenu();
-            }
-            if (this.mapControls &&
-                !this.mapControls.contains(e.target) &&
-                !this.mapToggleBtn?.contains(e.target)) {
-                this.closeMapControls();
             }
 
             if (this.taskviewPopover && this.taskviewPopover.classList.contains('open')) {
@@ -2960,26 +2855,23 @@ class Taskbar extends HTMLElement {
         const taskbarHeight = Math.round(taskbarRect.height);
         const bottomOffset = taskbarHeight + 6; // 6px gap above taskbar
         
-        // Update both start menu and map menu
+        // Update menus
         if (this.startMenu) {
             this.startMenu.style.bottom = `${bottomOffset}px`;
         }
         if (this.calendarMenu) {
             this.calendarMenu.style.bottom = `${bottomOffset}px`;
         }
-        if (this.mapMenu) {
-            this.mapMenu.style.bottom = `${bottomOffset}px`;
-        }
         if (this.musicDockMenu) {
             this.musicDockMenu.style.bottom = `${bottomOffset}px`;
         }
         
-        // Update map height to reach top of taskbar
-        this.updateMapHeightToTaskbar();
+        // Update background height to reach top of taskbar
+        this.updateBackgroundHeightToTaskbar();
     }
 
-    updateMapHeightToTaskbar() {
-        // Don't update map height if playlist overlay is controlling it
+    updateBackgroundHeightToTaskbar() {
+        // Don't update background height if playlist overlay is controlling it
         if (this.specialComponents?.['playlist-viewer']?.isOpen) {
             return;
         }
@@ -2995,257 +2887,14 @@ class Taskbar extends HTMLElement {
         const headerBottom = headerEl ? Math.round(headerEl.getBoundingClientRect().bottom) : 0;
         const topOffset = Math.max(0, headerBottom);
         
-        // Map height = taskbar top - header bottom
-        const mapHeight = Math.max(this.minBackgroundHeight, taskbarTop - topOffset);
-        
-        // Update the background height
-        this.setBackgroundHeight(mapHeight);
-    }
-
-    toggleMapMenu() {
-        if (!this.mapMenu || !this.mapMenuBtn) return;
-        const isOpen = this.mapMenu.classList.contains('open');
-        if (isOpen) {
-            this.closeMapMenu();
-        } else {
-            this.openMapMenu();
-        }
-    }
-
-    openMapMenu() {
-        if (!this.mapMenu || !this.mapMenuBtn) return;
-        this.populateMapMenu();
-        this.mapMenu.classList.add('open');
-        this.mapMenuBtn.classList.add('active');
-    }
-
-    closeMapMenu() {
-        if (!this.mapMenu || !this.mapMenuBtn) return;
-        this.mapMenu.classList.remove('open');
-        this.mapMenuBtn.classList.remove('active');
-    }
-
-    populateMapMenu() {
-        if (!this.baseLayersList || !this.overlaysList) return;
-
-        // Populate base layers
-        if (window.xaviBaseLayers) {
-            this.baseLayersList.innerHTML = '';
-            const currentBase = window.xaviCurrentBaseKey || 'osm';
-            
-            Object.keys(window.xaviBaseLayers).forEach(key => {
-                const layer = window.xaviBaseLayers[key];
-                const item = document.createElement('div');
-                item.className = 'base-layer-item';
-                if (key === currentBase) {
-                    item.classList.add('active');
-                }
-                item.textContent = layer.name || key.toUpperCase();
-                item.addEventListener('click', () => {
-                    if (window.xaviSwitchBaseLayer) {
-                        window.xaviSwitchBaseLayer(key);
-                        // Update active state
-                        this.baseLayersList.querySelectorAll('.base-layer-item').forEach(el => {
-                            el.classList.remove('active');
-                        });
-                        item.classList.add('active');
-                    }
-                });
-                this.baseLayersList.appendChild(item);
-            });
-        }
-
-        // Populate overlays
-        if (window.xaviOverlays) {
-            this.overlaysList.innerHTML = '';
-            
-            Object.keys(window.xaviOverlays).forEach(id => {
-                const overlay = window.xaviOverlays[id];
-                const item = document.createElement('label');
-                item.className = 'overlay-item';
-                
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.checked = overlay.enabled || false;
-                checkbox.addEventListener('change', (e) => {
-                    if (window.xaviToggleOverlay) {
-                        window.xaviToggleOverlay(id);
-                    }
-                });
-                
-                const label = document.createElement('span');
-                label.textContent = overlay.name || id;
-                
-                item.appendChild(checkbox);
-                item.appendChild(label);
-                this.overlaysList.appendChild(item);
-            });
-        }
-    }
-
-    toggleMapControls(forceState = null) {
-        if (typeof forceState === 'boolean') {
-            this.setMapControlsVisibility(forceState);
-            return;
-        }
-        this.setMapControlsVisibility(!this.mapControlsVisible);
-    }
-
-    closeMapControls() {
-        this.setMapControlsVisibility(false);
-    }
-
-    setMapControlsVisibility(visible) {
-        if (!this.mapControls) return;
-        this.mapControlsVisible = !!visible;
-        this.mapControls.classList.toggle('map-controls-visible', this.mapControlsVisible);
-        if (this.mapToggleBtn) {
-            this.mapToggleBtn.classList.toggle('active', this.mapControlsVisible);
-        }
-        if (this.mapControlsVisible) {
-            this.setOverlayListVisibility(true);
-        } else {
-            this.setOverlayListVisibility(false);
-        }
-    }
-
-    setOverlayListVisibility(visible) {
-        if (!this.overlayList) return;
-        this.overlayListVisible = !!visible;
-        this.overlayList.style.display = this.overlayListVisible ? 'flex' : 'none';
-        if (this.overlayToggleBtn) {
-            this.overlayToggleBtn.classList.toggle('active', this.overlayListVisible);
-        }
-    }
-
-    toggleOverlayList() {
-        this.setOverlayListVisibility(!this.overlayListVisible);
-    }
-
-    // Map size is no longer persisted in localStorage.
-    // Keep these as no-ops so other methods can call them safely.
-    loadSavedMapSizeMode() {
-        // Default to expanded if anyone calls this
-        this.mapSizeMode = 'expanded';
-    }
-
-    persistMapSizeMode() {
-        // Intentionally empty – persistence disabled
-    }
-
-    toggleMapSizeMode() {
-        this.mapSizeMode = this.mapSizeMode === 'collapsed' ? 'expanded' : 'collapsed';
-        this.applyMapSizeMode();
-        this.persistMapSizeMode();
-    }
-
-    applyMapSizeMode() {
-        if (this.tabSystem) {
-            this.tabSystem.classList.toggle('map-collapsed', this.mapSizeMode === 'collapsed');
-        }
-        if (this.mapSizeBtn) {
-            const label = this.mapSizeMode === 'collapsed' ? 'Maximize Map' : 'Minimize Map';
-            this.mapSizeBtn.textContent = label;
-            this.mapSizeBtn.setAttribute('aria-pressed', this.mapSizeMode === 'collapsed' ? 'true' : 'false');
-        }
-        this.invalidateMapSize();
-        // Notify map background to attempt revalidation if it is struggling (heavy JS load)
-        try { window.dispatchEvent(new Event('xavi-revalidate-map')); } catch (e) {}
-    }
-
-    loadSavedMapVisibility() {
-        try {
-            const stored = localStorage.getItem(this.mapHiddenKey);
-            if (stored === null) {
-                this.mapHidden = true;
-            } else {
-                this.mapHidden = stored === 'true';
-            }
-        } catch (err) {
-            console.warn('[MAP] Failed to load map visibility:', err);
-            this.mapHidden = true;
-        }
-    }
-
-    persistMapVisibility() {
-        try {
-            localStorage.setItem(this.mapHiddenKey, this.mapHidden ? 'true' : 'false');
-        } catch (err) {
-            console.warn('Failed to persist map visibility:', err);
-        }
-    }
-
-    toggleMapVisibility() {
-        if (!this.mapHidden) {
-            const currentHeight = Number.isFinite(this.backgroundHeight) ? this.backgroundHeight : this.defaultBackgroundHeight;
-            this.backgroundHeightBeforeHide = Math.max(currentHeight, this.minBackgroundHeight);
-        }
-        this.mapHidden = !this.mapHidden;
-        this.applyMapVisibility();
-        this.persistMapVisibility();
-    }
-
-    applyMapVisibility() {
-        const isHidden = !!this.mapHidden;
-        
-        if (this.tabSystem) {
-            this.tabSystem.classList.toggle('map-hidden', isHidden);
-        }
-        
-        if (this.mapVisibilityBtn) {
-            const label = isHidden ? 'Show Map' : 'Hide Map';
-            this.mapVisibilityBtn.textContent = label;
-            this.mapVisibilityBtn.setAttribute('aria-pressed', isHidden ? 'true' : 'false');
-            this.mapVisibilityBtn.setAttribute('title', label);
-        }
-
-        this.updateStartMenuActionLabels();
-
-        if (isHidden) {
-            this.setBackgroundHeight(this.minBackgroundHeight);
-        } else {
-            const restoreTarget = Number.isFinite(this.backgroundHeightBeforeHide)
-                ? Math.max(this.backgroundHeightBeforeHide, this.minBackgroundHeight)
-                : this.backgroundHeight;
-            this.setBackgroundHeight(restoreTarget);
-        }
-
-        this.invalidateMapSize();
-        try { window.dispatchEvent(new Event('xavi-revalidate-map')); } catch (e) {}
-    }
-
-    invalidateMapSize() {
-        // Throttle to max once per 150ms to prevent violation warnings
-        const now = Date.now();
-        if (now - this._lastMapInvalidate < 150) {
-            return;
-        }
-        this._lastMapInvalidate = now;
-        
-        if (!window.xaviBackgroundMap || typeof window.xaviBackgroundMap.invalidateSize !== 'function') {
-            return;
-        }
-        
-        if (this._mapResizeRaf) {
-            cancelAnimationFrame(this._mapResizeRaf);
-        }
-        this._mapResizeRaf = requestAnimationFrame(() => {
-            try {
-                window.xaviBackgroundMap.invalidateSize({ animate: false });
-            } catch (err) {
-                console.warn('Map resize failed:', err);
-            }
-            this._mapResizeRaf = null;
-        });
+        // Background height = taskbar top - header bottom
+        const backgroundHeight = Math.max(this.minBackgroundHeight, taskbarTop - topOffset);
+        this.setBackgroundHeight(backgroundHeight);
     }
 
     setBackgroundHeight(value) {
         const fallback = Number.isFinite(value) ? value : this.defaultBackgroundHeight;
-        const preferred = Math.max(this.minBackgroundHeight, Math.round(fallback));
-        if (!this.mapHidden) {
-            this.backgroundHeightBeforeHide = preferred;
-        }
-        const applied = this.mapHidden ? this.minBackgroundHeight : preferred;
+        const applied = Math.max(this.minBackgroundHeight, Math.round(fallback));
         this.backgroundHeight = applied;
         if (this.workspace && typeof this.workspace.calculateGridMetrics === 'function') {
             try {
@@ -3548,16 +3197,6 @@ class Taskbar extends HTMLElement {
     updateStartMenuActionLabels() {
         if (!this.startMenuItems) return;
 
-        const mapBtn = this.startMenuItems.querySelector('[data-xavi-menu-action="toggleMapVisibility"]');
-        if (mapBtn) {
-            const labelEl = mapBtn.querySelector('.start-menu-label');
-            const hiddenLabel = mapBtn.dataset.labelWhenHidden || 'Show Map';
-            const visibleLabel = mapBtn.dataset.labelWhenVisible || 'Hide Map';
-            if (labelEl) {
-                labelEl.textContent = this.mapHidden ? hiddenLabel : visibleLabel;
-            }
-        }
-
         const visBtn = this.startMenuItems.querySelector('[data-xavi-menu-action="toggleMusicVisualizer"]');
         if (visBtn) {
             const labelEl = visBtn.querySelector('.start-menu-label');
@@ -3601,16 +3240,6 @@ class Taskbar extends HTMLElement {
         }
 
         switch (action) {
-            case 'toggleMapVisibility':
-                this.toggleMapVisibility();
-                return;
-            case 'openMapMenu':
-                this.openMapMenu();
-                return;
-            case 'toggleMapControls':
-                this.closeMapMenu();
-                this.toggleMapControls();
-                return;
             case 'toggleBusPopup':
                 if (window.BusMenu && typeof window.BusMenu.togglePopup === 'function') {
                     window.BusMenu.togglePopup();
@@ -4745,22 +4374,19 @@ class Taskbar extends HTMLElement {
             bgLayer = document.createElement('div');
             bgLayer.className = 'xavi-bg-layer';
 
-            const map = document.createElement('div');
-            map.id = 'xavi-map';
-            map.setAttribute('aria-hidden', 'true');
-            map.setAttribute('data-base-path', '/xavi');
+            const background = document.createElement('div');
+            background.id = 'xavi-social-background';
+            background.setAttribute('aria-hidden', 'true');
 
             const grid = document.createElement('div');
             grid.id = 'workspace-grid';
 
-            bgLayer.append(map, grid);
+            bgLayer.append(background, grid);
             // Insert as first child of content-area
             this.contentArea.insertBefore(bgLayer, this.contentArea.firstChild || null);
         }
 
         this.applyBackgroundLayerStyles(bgLayer);
-        const mapElement = bgLayer.querySelector('#xavi-map');
-        this.announceMapContainer(mapElement);
         return bgLayer;
     }
 
@@ -4776,16 +4402,16 @@ class Taskbar extends HTMLElement {
         layerStyle.pointerEvents = 'auto';
         layerStyle.zIndex = '0';
 
-        const map = bgLayer.querySelector('#xavi-map');
-        if (map) {
-            const mapStyle = map.style;
-            mapStyle.position = 'absolute';
-            mapStyle.inset = '0';
-            mapStyle.pointerEvents = 'auto';
-            mapStyle.zIndex = '0';
-            mapStyle.width = '100%';
-            mapStyle.height = '100%';
-            mapStyle.background = 'transparent';
+        const background = bgLayer.querySelector('#xavi-social-background');
+        if (background) {
+            const bgStyle = background.style;
+            bgStyle.position = 'absolute';
+            bgStyle.inset = '0';
+            bgStyle.pointerEvents = 'auto';
+            bgStyle.zIndex = '0';
+            bgStyle.width = '100%';
+            bgStyle.height = '100%';
+            bgStyle.background = 'transparent';
         }
 
         const grid = bgLayer.querySelector('#workspace-grid');
@@ -4803,19 +4429,6 @@ class Taskbar extends HTMLElement {
             gridStyle.backgroundPosition = '0 0';
             gridStyle.backgroundRepeat = 'repeat';
         }
-    }
-
-    announceMapContainer(mapElement) {
-        if (!mapElement) {
-            return;
-        }
-        if (this._lastMapElement === mapElement) {
-            return;
-        }
-        this._lastMapElement = mapElement;
-        window.dispatchEvent(new CustomEvent('xavi-map-container-ready', {
-            detail: { element: mapElement }
-        }));
     }
 
     renderPanelSelectors() {
@@ -5842,7 +5455,6 @@ class Taskbar extends HTMLElement {
         // No need to set height - grid is positioned absolutely with top/bottom in CSS
         
         // Update background height to match calculated grid area
-        // This ensures the map uses the full available height from the start
         const calculatedBackgroundHeight = totalHeight;
         if (calculatedBackgroundHeight > this.minBackgroundHeight) {
             this.setBackgroundHeight(calculatedBackgroundHeight);
