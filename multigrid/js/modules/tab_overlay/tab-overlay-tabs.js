@@ -9,9 +9,21 @@
     const CSS_ID = 'xavi-tab-overlay-styles';
     const SOCIAL_APP_CSS_ID = 'xavi-social-app-css';
     const SOCIAL_APP_JS_ID = 'xavi-social-app-js';
+    const BG_STYLE_ID = 'xavi-social-background-styles';
 
+    const BG_HOST_ID = 'xavi-social-background';
+    const BG_ROOT_ID = 'xavi-social-root';
+    const BG_PLACEHOLDER_ID = 'xavi-bg-placeholder';
+
+    // Background selector tabs (not all routes exist in the Vite app yet; placeholders are fine).
+    const TAB_TIMELINE = 'timeline';
+    const TAB_NOTIFICATIONS = 'notifications';
+    const TAB_PROFILE = 'profile';
+    const TAB_MEDIA = 'media';
+    const TAB_SEARCH = 'search';
     const TAB_PLAYLIST = 'playlist';
-    const TAB_SOCIAL = 'social';
+
+    const SOCIAL_ALIASES = new Set(['social', 'feed', 'timeline']);
 
     function getWorkspace() {
         return document.querySelector('xavi-multi-grid');
@@ -24,6 +36,95 @@
         } catch (e) {
             return null;
         }
+    }
+
+    function getBackgroundHost() {
+        const taskbar = getTaskbar();
+        if (!taskbar) return null;
+        try {
+            // Ensure it exists (taskbar provides this helper).
+            if (typeof taskbar.ensureBackgroundLayer === 'function') {
+                taskbar.ensureBackgroundLayer();
+            }
+        } catch (e) {
+            // ignore
+        }
+        try {
+            return taskbar.shadowRoot?.getElementById?.(BG_HOST_ID) || taskbar.shadowRoot?.querySelector?.('#' + BG_HOST_ID) || null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function ensureBackgroundStylesInjected() {
+        const taskbar = getTaskbar();
+        if (!taskbar?.shadowRoot) return;
+        if (taskbar.shadowRoot.getElementById(BG_STYLE_ID)) return;
+
+        const style = document.createElement('style');
+        style.id = BG_STYLE_ID;
+        style.textContent = `
+            #${BG_HOST_ID} {
+                position: absolute;
+                inset: 0;
+                overflow: hidden;
+            }
+
+            #${BG_HOST_ID} #${BG_ROOT_ID} {
+                position: absolute;
+                inset: 0;
+                overflow: hidden;
+                pointer-events: auto;
+            }
+
+            /* Keep the Vite social app contained within the background */
+            #${BG_HOST_ID} #${BG_ROOT_ID} .xv-shell {
+                position: absolute !important;
+                inset: 0 !important;
+                width: 100% !important;
+                height: 100% !important;
+            }
+
+            #${BG_HOST_ID} #${BG_PLACEHOLDER_ID} {
+                position: absolute;
+                inset: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: rgba(255, 255, 255, 0.75);
+                font-weight: 600;
+                letter-spacing: 0.02em;
+                background: rgba(0, 0, 0, 0.0);
+                pointer-events: none;
+                user-select: none;
+            }
+        `;
+
+        taskbar.shadowRoot.appendChild(style);
+    }
+
+    function ensureBackgroundNodes() {
+        const host = getBackgroundHost();
+        if (!host) return null;
+
+        ensureBackgroundStylesInjected();
+
+        let root = host.querySelector('#' + BG_ROOT_ID);
+        if (!root) {
+            root = document.createElement('div');
+            root.id = BG_ROOT_ID;
+            host.appendChild(root);
+        }
+
+        let placeholder = host.querySelector('#' + BG_PLACEHOLDER_ID);
+        if (!placeholder) {
+            placeholder = document.createElement('div');
+            placeholder.id = BG_PLACEHOLDER_ID;
+            placeholder.style.display = 'none';
+            host.appendChild(placeholder);
+        }
+
+        return { host, root, placeholder };
     }
 
     function getFloatingLayer(ws) {
@@ -113,34 +214,7 @@
                     position: relative;
                 }
 
-                #floating-panel-layer .playlist-overlay.tab-overlay .tab-overlay-panel {
-                    position: absolute;
-                    inset: 0;
-                    display: none;
-                    min-height: 0;
-                }
-
-                #floating-panel-layer .playlist-overlay.tab-overlay[data-active-tab="${TAB_PLAYLIST}"] .tab-overlay-panel[data-tab="${TAB_PLAYLIST}"],
-                #floating-panel-layer .playlist-overlay.tab-overlay[data-active-tab="${TAB_SOCIAL}"] .tab-overlay-panel[data-tab="${TAB_SOCIAL}"] {
-                    display: block;
-                }
-
-                #floating-panel-layer .playlist-overlay.tab-overlay .tab-overlay-panel[data-tab="${TAB_SOCIAL}"] {
-                    overflow: hidden;
-                }
-
-                #floating-panel-layer .playlist-overlay.tab-overlay .tab-overlay-panel[data-tab="${TAB_SOCIAL}"] #xavi-social-root {
-                    position: absolute;
-                    inset: 0;
-                    overflow: hidden;
-                }
-
-                #floating-panel-layer .playlist-overlay.tab-overlay .tab-overlay-panel[data-tab="${TAB_SOCIAL}"] #xavi-social-root .xv-shell {
-                    position: absolute !important;
-                    inset: 0 !important;
-                    width: 100% !important;
-                    height: 100% !important;
-                }
+                /* Body stays as playlist viewer; background switching is handled separately. */
             `;
 
             root.appendChild(style);
@@ -162,7 +236,7 @@
         const header = document.createElement('div');
         header.className = 'tab-overlay-header';
         header.setAttribute('role', 'tablist');
-        header.setAttribute('aria-label', 'Overlay tabs');
+        header.setAttribute('aria-label', 'Background selector');
 
         const mkTab = (tabId, label) => {
             const btn = document.createElement('button');
@@ -175,33 +249,27 @@
             return btn;
         };
 
+        const timelineTab = mkTab(TAB_TIMELINE, 'Timeline');
+        const notificationsTab = mkTab(TAB_NOTIFICATIONS, 'Notifications');
+        const profileTab = mkTab(TAB_PROFILE, 'Profile');
+        const mediaTab = mkTab(TAB_MEDIA, 'Media');
+        const searchTab = mkTab(TAB_SEARCH, 'Search');
         const playlistTab = mkTab(TAB_PLAYLIST, 'Playlist');
-        const socialTab = mkTab(TAB_SOCIAL, 'Social');
 
+        header.appendChild(timelineTab);
+        header.appendChild(notificationsTab);
+        header.appendChild(profileTab);
+        header.appendChild(mediaTab);
+        header.appendChild(searchTab);
         header.appendChild(playlistTab);
-        header.appendChild(socialTab);
 
         const body = document.createElement('div');
         body.className = 'tab-overlay-body';
 
-        const playlistPanel = document.createElement('div');
-        playlistPanel.className = 'tab-overlay-panel';
-        playlistPanel.dataset.tab = TAB_PLAYLIST;
-
-        const socialPanel = document.createElement('div');
-        socialPanel.className = 'tab-overlay-panel';
-        socialPanel.dataset.tab = TAB_SOCIAL;
-
-        const socialRoot = document.createElement('div');
-        socialRoot.id = 'xavi-social-root';
-        socialPanel.appendChild(socialRoot);
-
+        // Keep the playlist viewer as the overlay body content.
         if (playlistContent) {
-            playlistPanel.appendChild(playlistContent);
+            body.appendChild(playlistContent);
         }
-
-        body.appendChild(playlistPanel);
-        body.appendChild(socialPanel);
 
         // Insert header + body before the resize handle (keep the handle as a direct child of overlay)
         if (resizeHandle) {
@@ -214,9 +282,9 @@
 
         overlay.dataset.tabbed = 'true';
 
-        // Default tab
+        // Default background tab
         if (!overlay.dataset.activeTab) {
-            overlay.dataset.activeTab = TAB_PLAYLIST;
+            overlay.dataset.activeTab = TAB_TIMELINE;
         }
 
         // Bind switching
@@ -225,7 +293,7 @@
             if (!btn) return;
             const tabId = String(btn.dataset.tab || '').trim();
             if (!tabId) return;
-            selectTab(tabId, { openOverlay: true });
+            selectTab(tabId, { openOverlay: tabId === TAB_PLAYLIST });
         });
 
         syncTabUI(overlay);
@@ -233,7 +301,7 @@
 
     function syncTabUI(overlay) {
         if (!overlay) return;
-        const active = String(overlay.dataset.activeTab || TAB_PLAYLIST);
+        const active = String(overlay.dataset.activeTab || TAB_TIMELINE);
         const buttons = overlay.querySelectorAll('.tab-overlay-tab');
         buttons.forEach((btn) => {
             const tabId = String(btn.dataset.tab || '');
@@ -264,13 +332,59 @@
         }
     }
 
-    function ensureSocialMountRoot(overlay) {
-        const root = overlay?.querySelector?.('#xavi-social-root');
-        if (!root) {
-            return;
+    function setBackgroundMode(mode) {
+        const nodes = ensureBackgroundNodes();
+        if (!nodes) return false;
+
+        const { root, placeholder } = nodes;
+
+        const normalized = String(mode || '').trim().toLowerCase();
+
+        // Social views
+        if ([TAB_TIMELINE, TAB_NOTIFICATIONS, TAB_PROFILE].includes(normalized) || SOCIAL_ALIASES.has(normalized)) {
+            placeholder.style.display = 'none';
+            root.style.display = 'block';
+
+            // Make sure the app is mounted into the background root.
+            window.__xaviSocialMountRoot = root;
+            ensureSocialAssetsLoaded();
+
+            // Switch route for the background app (hash-based).
+            if (normalized === TAB_NOTIFICATIONS) {
+                if (window.location.hash !== '#notifications') {
+                    window.location.hash = '#notifications';
+                }
+            } else if (normalized === TAB_PROFILE) {
+                // Let the app choose the default actor when actor is omitted.
+                if (!window.location.hash.startsWith('#profile')) {
+                    window.location.hash = '#profile/';
+                }
+            } else {
+                if (!window.location.hash || window.location.hash === '#') {
+                    window.location.hash = '#feed';
+                } else if (!window.location.hash.startsWith('#feed')) {
+                    window.location.hash = '#feed';
+                }
+            }
+
+            return true;
         }
-        window.__xaviSocialMountRoot = root;
-        ensureSocialAssetsLoaded();
+
+        // Placeholder backgrounds (until implemented)
+        if (normalized === TAB_MEDIA) {
+            root.style.display = 'none';
+            placeholder.textContent = 'Media (coming soon)';
+            placeholder.style.display = 'flex';
+            return true;
+        }
+        if (normalized === TAB_SEARCH) {
+            root.style.display = 'none';
+            placeholder.textContent = 'Search (coming soon)';
+            placeholder.style.display = 'flex';
+            return true;
+        }
+
+        return false;
     }
 
     function selectTab(tabId, options = {}) {
@@ -285,15 +399,27 @@
 
         ensureOverlayTabbed(overlay);
 
-        const desired = String(tabId || '').trim() || TAB_PLAYLIST;
+        const raw = String(tabId || '').trim().toLowerCase();
+        const desired = raw || TAB_TIMELINE;
         overlay.dataset.activeTab = desired;
         syncTabUI(overlay);
 
-        if (desired === TAB_SOCIAL) {
-            ensureSocialMountRoot(overlay);
+        if (desired !== TAB_PLAYLIST) {
+            setBackgroundMode(desired);
         }
 
         if (options.openOverlay) {
+            const taskbar = getTaskbar();
+            if (taskbar && typeof taskbar.openPlaylistOverlay === 'function') {
+                try {
+                    taskbar.openPlaylistOverlay();
+                } catch (e) {
+                    // ignore
+                }
+            }
+        }
+
+        if (desired === TAB_PLAYLIST) {
             const taskbar = getTaskbar();
             if (taskbar && typeof taskbar.openPlaylistOverlay === 'function') {
                 try {
@@ -315,6 +441,9 @@
 
         ensureStylesInjected(ws);
 
+        // Always ensure background exists and defaults to feed.
+        setBackgroundMode(TAB_TIMELINE);
+
         const overlay = findOverlay();
         if (!overlay) {
             return false;
@@ -326,8 +455,16 @@
     }
 
     // Public API used by other modules (eg. Social) to open/select a tab.
-    window.selectTabOverlayTab = (tabId) => selectTab(tabId, { openOverlay: false });
-    window.openTabOverlayTab = (tabId) => selectTab(tabId, { openOverlay: true });
+    window.selectTabOverlayTab = (tabId) => {
+        const raw = String(tabId || '').trim().toLowerCase();
+        const normalized = SOCIAL_ALIASES.has(raw) ? TAB_TIMELINE : raw;
+        return selectTab(normalized, { openOverlay: false });
+    };
+    window.openTabOverlayTab = (tabId) => {
+        const raw = String(tabId || '').trim().toLowerCase();
+        const normalized = SOCIAL_ALIASES.has(raw) ? TAB_TIMELINE : raw;
+        return selectTab(normalized, { openOverlay: true });
+    };
 
     // Wait for workspace to exist.
     window.addEventListener('xavi-workspace-ready', () => {

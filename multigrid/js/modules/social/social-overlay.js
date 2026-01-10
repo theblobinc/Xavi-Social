@@ -44,7 +44,8 @@
                 return;
             }
             window.__xaviSocialOverlayAutoLaunched = true;
-            openSocialTab({ workspace: event?.detail?.workspace }, { openOverlay: true });
+            // Default: Social feed should be the grid background, without forcing the playlist overlay open.
+            openSocialTab({ workspace: event?.detail?.workspace }, { openOverlay: false });
         } catch (e) {
             // ignore
         }
@@ -61,7 +62,7 @@
                 return;
             }
             window.__xaviSocialOverlayAutoLaunched = true;
-            openSocialTab({ workspace: ws }, { openOverlay: true });
+            openSocialTab({ workspace: ws }, { openOverlay: false });
         } catch (e) {
             // ignore
         }
@@ -81,12 +82,12 @@
 
         // Preferred: drive everything through the tab overlay inside the grid.
         if (typeof window.openTabOverlayTab === 'function' && openOverlay) {
-            window.openTabOverlayTab('social');
+            window.openTabOverlayTab('timeline');
             return true;
         }
 
         if (typeof window.selectTabOverlayTab === 'function') {
-            window.selectTabOverlayTab('social');
+            window.selectTabOverlayTab('timeline');
             if (openOverlay) {
                 const taskbar = getTaskbar(context?.workspace);
                 if (taskbar && typeof taskbar.openPlaylistOverlay === 'function') {
