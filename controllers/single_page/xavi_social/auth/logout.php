@@ -18,7 +18,7 @@ final class Logout extends PageController
             $user->logout(false);
         }
 
-        $response = $this->app->make(ResponseFactoryInterface::class)->redirect('/xavi_social', Response::HTTP_FOUND);
+        $response = $this->app->make(ResponseFactoryInterface::class)->redirect('/social', Response::HTTP_FOUND);
         $response->headers->set('Cache-Control', 'no-store');
         $response->send();
         exit;

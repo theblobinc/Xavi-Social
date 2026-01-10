@@ -6,6 +6,7 @@ namespace Concrete\Package\XaviSocial;
 
 use Concrete\Core\Entity\Package as PackageEntity;
 use Concrete\Core\Page\Single as SinglePage;
+use Concrete\Core\Page\Page;
 use Concrete\Core\Package\Package;
 use Concrete\Core\Support\Facade\Events;
 use Concrete\Core\Support\Facade\Log;
@@ -98,25 +99,27 @@ final class Controller extends Package
 
     private function installOrUpdateSinglePages(Package|PackageEntity $pkg): void
     {
+        $this->removeLegacySinglePageTree('/xavi_social');
+
         $paths = [
-            '/xavi_social',
-            '/xavi_social/callback',
-            '/xavi_social/client_metadata',
-            '/xavi_social/api/session',
-            '/xavi_social/api/jwt',
-            '/xavi_social/api/me',
-            '/xavi_social/api/me/ensure_account',
-            '/xavi_social/api/accounts',
-            '/xavi_social/api/accounts/upsert',
-            '/xavi_social/api/accounts/delete',
-            '/xavi_social/api/feed',
-            '/xavi_social/api/post',
-            '/xavi_social/api/thread',
-            '/xavi_social/api/profile',
-            '/xavi_social/api/notifications',
-            '/xavi_social/api/debug',
-            '/xavi_social/auth/login',
-            '/xavi_social/auth/logout',
+            '/social',
+            '/social/callback',
+            '/social/client_metadata',
+            '/social/api/session',
+            '/social/api/jwt',
+            '/social/api/me',
+            '/social/api/me/ensure_account',
+            '/social/api/accounts',
+            '/social/api/accounts/upsert',
+            '/social/api/accounts/delete',
+            '/social/api/feed',
+            '/social/api/post',
+            '/social/api/thread',
+            '/social/api/profile',
+            '/social/api/notifications',
+            '/social/api/debug',
+            '/social/auth/login',
+            '/social/auth/logout',
         ];
 
 
@@ -125,6 +128,27 @@ final class Controller extends Package
             if ($page) {
                 $page->setAttribute('exclude_nav', true);
             }
+        }
+    }
+
+    private function removeLegacySinglePageTree(string $path): void
+    {
+        try {
+            $page = Page::getByPath($path);
+            if (!is_object($page) || $page->isError()) {
+                return;
+            }
+
+            if (method_exists($page, 'getPackageHandle')) {
+                $pkgHandle = (string) $page->getPackageHandle();
+                if ($pkgHandle !== '' && $pkgHandle !== (string) $this->pkgHandle) {
+                    return;
+                }
+            }
+
+            $page->delete();
+        } catch (\Throwable $e) {
+            // Don't block installs/upgrades on cleanup failures.
         }
     }
 }

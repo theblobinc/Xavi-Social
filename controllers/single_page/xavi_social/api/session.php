@@ -19,8 +19,8 @@ final class Session extends PageController
             'loggedIn' => $user->isRegistered(),
             'userId' => $user->isRegistered() ? (int) $user->getUserID() : null,
             'userName' => $user->isRegistered() ? (string) $user->getUserName() : null,
-            'loginUrl' => (string) Url::to('/xavi_social/auth/login'),
-            'logoutUrl' => (string) Url::to('/xavi_social/auth/logout'),
+            'loginUrl' => (string) Url::to('/social/auth/login'),
+            'logoutUrl' => (string) Url::to('/social/auth/logout'),
         ];
 
         $response = new JsonResponse($payload);

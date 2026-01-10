@@ -21,10 +21,10 @@ final class ClientMetadata extends PageController
         }
 
         $metadata = [
-            'client_id' => $origin . '/xavi_social/client_metadata',
+            'client_id' => $origin . '/social/client_metadata',
                 'client_name' => 'Princegeorge Social',
-            'client_uri' => $origin . '/xavi_social',
-            'redirect_uris' => [$origin . '/xavi_social/callback'],
+            'client_uri' => $origin . '/social',
+            'redirect_uris' => [$origin . '/social/callback'],
             'scope' => 'atproto',
             'grant_types' => ['authorization_code', 'refresh_token'],
             'response_types' => ['code'],

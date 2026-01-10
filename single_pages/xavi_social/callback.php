@@ -9,7 +9,7 @@ defined('C5_EXECUTE') or die('Access Denied.');
 $resolver = getenv('XAVI_SOCIAL_ATPROTO_XRPC_HOST');
 $resolver = $resolver === false ? '' : rtrim(trim((string) $resolver), '/');
 if ($resolver === '') {
-	$resolver = rtrim((string) Url::to('/xavi_social/api'), '/');
+	$resolver = rtrim((string) Url::to('/social/api'), '/');
 }
 
 ?>

@@ -13,7 +13,7 @@ final class Login extends PageController
 {
     public function view(): void
     {
-        $this->app->make(PostLoginLocation::class)->setSessionPostLoginUrl('/xavi_social');
+        $this->app->make(PostLoginLocation::class)->setSessionPostLoginUrl('/social');
 
         $response = $this->app->make(ResponseFactoryInterface::class)->redirect('/login', Response::HTTP_FOUND);
         $response->headers->set('Cache-Control', 'no-store');
