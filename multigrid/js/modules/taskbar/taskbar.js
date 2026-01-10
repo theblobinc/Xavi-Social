@@ -2598,7 +2598,7 @@ class Taskbar extends HTMLElement {
 
     getBasePath() {
         const workspace = this.closest('xavi-multi-grid');
-        return workspace?.dataset?.basePath || '/application/single_pages/xavi_multi_grid';
+        return workspace?.dataset?.basePath || window.XAVI_MULTIGRID_BASE || '/packages/xavi_social/multigrid';
     }
 
     getDefaultMenuDefinition() {

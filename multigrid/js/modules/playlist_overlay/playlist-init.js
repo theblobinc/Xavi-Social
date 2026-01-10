@@ -9,7 +9,7 @@
 
     function initializeModule() {
     const OVERLAY_ID = 'playlist-viewer-overlay';
-    const API_BASE = (typeof window !== 'undefined' && window.XAVI_API_BASE) ? window.XAVI_API_BASE : '/pgmusic';
+    const API_BASE = (typeof window !== 'undefined' && window.XAVI_API_BASE) ? window.XAVI_API_BASE : '/social/api';
 
     let videoIds = [];
     let videoData = {};
