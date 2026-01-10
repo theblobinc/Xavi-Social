@@ -5,13 +5,25 @@ class GridObject {
     constructor(element, options = {}) {
         this.element = element;
         this.options = {
-            gridSize: 30,
+            // Column grid defaults (no legacy 30px grid).
+            gridSize: 350,
             gridSnapEnabled: true,
-            minWidth: 360,
+            // Optional axis-specific snap controls (defaults to gridSnapEnabled).
+            gridSnapXEnabled: true,
+            gridSnapYEnabled: false,
+            // Optional callbacks for lifecycle hooks.
+            onDragEnd: null,
+            onResizeEnd: null,
+            minWidth: 350,
             minHeight: 200,
             defaultWidth: 600,
             defaultHeight: 400,
             saveStateKey: null,
+            // Axis controls (optional). Defaults preserve current behavior.
+            // - dragAxis: 'both' | 'x' | 'y'
+            // - resizeAxis: 'both' | 'x' | 'y'
+            dragAxis: 'both',
+            resizeAxis: 'both',
             draggable: true,
             resizable: true,
             ...options
@@ -276,10 +288,23 @@ class GridObject {
         let newLeft = clientX - workspace.left - this.dragStartX;
         let newTop = clientY - workspace.top - this.dragStartY;
 
-        // Apply grid snap
-        if (this.options.gridSnapEnabled) {
-            newLeft = Math.round(newLeft / this.options.gridSize) * this.options.gridSize;
-            newTop = Math.round(newTop / this.options.gridSize) * this.options.gridSize;
+        const dragAxis = (this.options.dragAxis || 'both').toLowerCase();
+        if (dragAxis === 'x') {
+            newTop = this.currentTop;
+        } else if (dragAxis === 'y') {
+            newLeft = this.currentLeft;
+        }
+
+        // Apply grid snap (axis-specific).
+        const snapX = this.options.gridSnapXEnabled == null ? this.options.gridSnapEnabled : Boolean(this.options.gridSnapXEnabled);
+        const snapY = this.options.gridSnapYEnabled == null ? this.options.gridSnapEnabled : Boolean(this.options.gridSnapYEnabled);
+        if (this.options.gridSize > 0) {
+            if (snapX) {
+                newLeft = Math.round(newLeft / this.options.gridSize) * this.options.gridSize;
+            }
+            if (snapY) {
+                newTop = Math.round(newTop / this.options.gridSize) * this.options.gridSize;
+            }
         }
 
         // Constrain to workspace bounds
@@ -302,6 +327,30 @@ class GridObject {
         this.element.style.cursor = '';
 
         this.saveState();
+
+        const detail = {
+            left: this.currentLeft,
+            top: this.currentTop,
+            width: this.currentWidth,
+            height: this.currentHeight,
+            element: this.element
+        };
+        try {
+            this.element.dispatchEvent(new CustomEvent('grid-object-drag-end', {
+                bubbles: true,
+                composed: true,
+                detail
+            }));
+        } catch {
+            // ignore
+        }
+        if (typeof this.options.onDragEnd === 'function') {
+            try {
+                this.options.onDragEnd(detail);
+            } catch {
+                // ignore
+            }
+        }
     }
 
     startResizing(e) {
@@ -350,7 +399,18 @@ class GridObject {
         let newLeft = this.resizeStartLeft;
         let newTop = this.resizeStartTop;
 
-        const dir = this.resizeDirection;
+        const resizeAxis = (this.options.resizeAxis || 'both').toLowerCase();
+        let dir = this.resizeDirection;
+
+        if (resizeAxis === 'x') {
+            dir = String(dir || '').replace(/[ns]/g, '');
+        } else if (resizeAxis === 'y') {
+            dir = String(dir || '').replace(/[ew]/g, '');
+        }
+
+        if (!dir) {
+            dir = this.resizeDirection || 'se';
+        }
 
         // Calculate new dimensions based on direction
         if (dir.includes('e')) newWidth = this.resizeStartWidth + deltaX;
@@ -388,17 +448,21 @@ class GridObject {
             newHeight = this.resizeStartTop + this.resizeStartHeight - newTop;
         }
 
-        // Apply grid snapping if enabled
-        if (this.options.gridSnapEnabled && this.options.gridSize > 0) {
+        // Apply grid snapping (axis-specific).
+        const snapX = this.options.gridSnapXEnabled == null ? this.options.gridSnapEnabled : Boolean(this.options.gridSnapXEnabled);
+        const snapY = this.options.gridSnapYEnabled == null ? this.options.gridSnapEnabled : Boolean(this.options.gridSnapYEnabled);
+        if ((snapX || snapY) && this.options.gridSize > 0) {
             const origin = this.getGridOrigin();
-            // Snap dimensions to grid
-            newWidth = Math.round(newWidth / this.options.gridSize) * this.options.gridSize;
-            newHeight = Math.round(newHeight / this.options.gridSize) * this.options.gridSize;
-            // Snap position relative to grid origin
-            const relativeLeft = newLeft - origin.left;
-            const relativeTop = newTop - origin.top;
-            newLeft = origin.left + Math.round(relativeLeft / this.options.gridSize) * this.options.gridSize;
-            newTop = origin.top + Math.round(relativeTop / this.options.gridSize) * this.options.gridSize;
+            if (snapX) {
+                newWidth = Math.round(newWidth / this.options.gridSize) * this.options.gridSize;
+                const relativeLeft = newLeft - origin.left;
+                newLeft = origin.left + Math.round(relativeLeft / this.options.gridSize) * this.options.gridSize;
+            }
+            if (snapY) {
+                newHeight = Math.round(newHeight / this.options.gridSize) * this.options.gridSize;
+                const relativeTop = newTop - origin.top;
+                newTop = origin.top + Math.round(relativeTop / this.options.gridSize) * this.options.gridSize;
+            }
         }
 
         this.currentWidth = newWidth;
@@ -417,6 +481,30 @@ class GridObject {
         this.resizeDirection = null;
 
         this.saveState();
+
+        const detail = {
+            left: this.currentLeft,
+            top: this.currentTop,
+            width: this.currentWidth,
+            height: this.currentHeight,
+            element: this.element
+        };
+        try {
+            this.element.dispatchEvent(new CustomEvent('grid-object-resize-end', {
+                bubbles: true,
+                composed: true,
+                detail
+            }));
+        } catch {
+            // ignore
+        }
+        if (typeof this.options.onResizeEnd === 'function') {
+            try {
+                this.options.onResizeEnd(detail);
+            } catch {
+                // ignore
+            }
+        }
     }
 
     getCursorForDirection(direction) {

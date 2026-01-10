@@ -29,3 +29,47 @@ else
 fi
 
 echo "Built frontend to: ${PKG_DIR}/dist"
+
+# Write a lightweight build stamp for debugging cache/deploy issues.
+# This file is safe to ship and can be fetched by the SPA.
+if [[ -d "${PKG_DIR}/dist" ]]; then
+  built_at_epoch="$(date +%s)"
+  built_at_utc="$(date -u -Iseconds)"
+
+  pkg_version=""
+  if [[ -f "${PKG_DIR}/controller.php" ]]; then
+    pkg_version_line="$(grep -F 'protected $pkgVersion' "${PKG_DIR}/controller.php" | head -n 1 || true)"
+    if [[ -n "${pkg_version_line}" ]]; then
+      pkg_version="$(printf '%s' "${pkg_version_line}" | sed -nE "s/.*'([^']+)'.*/\1/p" || true)"
+      if [[ -z "${pkg_version}" ]]; then
+        pkg_version="$(printf '%s' "${pkg_version_line}" | sed -nE 's/.*"([^"]+)".*/\1/p' || true)"
+      fi
+    fi
+  fi
+
+  site_dir="$(cd "${PKG_DIR}/../../../../" && pwd)"
+  git_sha=""
+  if command -v git >/dev/null 2>&1; then
+    git_sha="$(git -C "${PKG_DIR}" rev-parse --short HEAD 2>/dev/null || true)"
+    if [[ -z "${git_sha}" ]]; then
+      git_sha="$(git -C "${site_dir}" rev-parse --short HEAD 2>/dev/null || true)"
+    fi
+  fi
+
+  cat > "${PKG_DIR}/dist/build.json" <<JSON
+{
+  "builtAt": "${built_at_utc}",
+  "builtAtEpoch": ${built_at_epoch},
+  "pkgVersion": "${pkg_version}",
+  "gitSha": "${git_sha}"
+}
+JSON
+fi
+
+# Normalize ownership/permissions on build artifacts to avoid root-owned dist when built via Docker.
+if [[ -d "${PKG_DIR}/dist" ]]; then
+  if command -v chown >/dev/null 2>&1; then
+    chown -R "$(id -u):$(id -g)" "${PKG_DIR}/dist" 2>/dev/null || true
+  fi
+  chmod -R u+rwX "${PKG_DIR}/dist" 2>/dev/null || true
+fi

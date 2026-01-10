@@ -1,4 +1,3 @@
-// ---- BEGIN multi-tab playback lock ----
 // Initialize z-index manager CSS variables
 if (window.ZIndexManager) {
     window.ZIndexManager.injectCSSVariables();
@@ -10,52 +9,6 @@ if (typeof window !== 'undefined' && !window.sharedStateManager) {
     // Will be loaded by shared-state-manager.js
     console.log('SharedStateManager will initialize from shared-state-manager.js');
 }
-
-// Storage + BroadcastChannel can throw in some browsers/private modes.
-let myTabId = null;
-try {
-    myTabId = sessionStorage.getItem('myTabId');
-    if (!myTabId) {
-        myTabId = `${Date.now()}-${Math.random()}`;
-        sessionStorage.setItem('myTabId', myTabId);
-    }
-} catch (e) {
-    myTabId = `${Date.now()}-${Math.random()}`;
-}
-
-let musicChannel = null;
-try {
-    if (typeof BroadcastChannel !== 'undefined') {
-        musicChannel = new BroadcastChannel('music_player_control');
-    }
-} catch (e) {
-    musicChannel = null;
-}
-
-window.musicChannel = musicChannel;
-window.myTabId = myTabId;
-
-try {
-    const initialOwner = localStorage.getItem('musicPlayerCurrentOwner');
-    if (initialOwner) {
-        window.currentPlayerTabId = initialOwner;
-    }
-} catch (e) {
-    // ignore
-}
-
-// Legacy helpers kept for compatibility but deprecated
-// All tabs are now equal - no ownership concept
-window.claimMusicPlaybackOwnership = () => {
-    console.warn('[Deprecated] claimMusicPlaybackOwnership - no longer needed in multi-focal architecture');
-};
-window.releaseMusicPlaybackOwnership = () => {
-    console.warn('[Deprecated] releaseMusicPlaybackOwnership - no longer needed in multi-focal architecture');
-};
-// ---- END multi-tab playback lock ----
-
-// Tab overlay module now handles all overlay initialization
-console.log('[Main] Overlay initialization delegated to tab_overlay module');
 
 // Initialize workspace
 document.addEventListener('DOMContentLoaded', () => {

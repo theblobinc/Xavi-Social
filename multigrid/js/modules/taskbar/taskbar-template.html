@@ -83,6 +83,7 @@
     .video-player-dock {
         order: 100;
         flex-shrink: 0;
+        display: none;
     }
 
     /* If vertical space is constrained (short viewport), switch task tiles to compact icon layout.
@@ -560,7 +561,7 @@
     }
 
     .video-player-dock.visible {
-        display: flex;
+        display: none !important;
     }
 
     #music-dock-button {
@@ -723,10 +724,7 @@
     }
 
     .video-player-dock.visible {
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-        gap: 8px;
+        display: none !important;
     }
 
     .video-dock-inline {
@@ -927,7 +925,7 @@
     .music-dock-menu {
         position: absolute;
         bottom: 108px;
-        left: 8px;
+        left: 0;
         background: rgba(12, 12, 12, 0.98);
         border: 1px solid rgba(255, 255, 255, 0.2);
         border-radius: 8px;
@@ -947,7 +945,8 @@
     }
 
     .start-menu {
-        width: 320px;
+        width: var(--xavi-col-w, 350px);
+        max-width: var(--xavi-col-w, 350px);
         max-height: 70vh;
 
         /* Dark theme override */
@@ -1146,6 +1145,25 @@
         cursor: pointer;
         padding: 0;
         flex-shrink: 0;
+    }
+
+    .start-menu-settings-btn {
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.08);
+        border: none;
+        border-radius: 6px;
+        color: rgba(255, 255, 255, 0.9);
+        cursor: pointer;
+        flex-shrink: 0;
+        font-size: 1.05rem;
+    }
+
+    .start-menu-settings-btn:hover {
+        background: rgba(255, 255, 255, 0.14);
     }
 
     .start-menu-close-btn:hover {
@@ -1656,7 +1674,7 @@
             <div class="taskbar-corner" aria-label="Taskbar corner">
                 <button class="taskbar-clock" id="taskbar-clock" type="button" aria-label="Date and time" title="Open calendar"></button>
                 <button class="start-menu-btn" id="start-menu-btn" title="Open menu" type="button">Menu</button>
-                <button class="corner-btn" id="playlist-visualizer-btn" title="Toggle playlist visualizer" type="button" aria-label="Toggle playlist visualizer"><span aria-hidden="true">♪</span></button>
+                <button class="corner-btn" id="taskbar-settings-btn" title="Settings" type="button" aria-label="Settings"><span aria-hidden="true">⚙️</span></button>
             </div>
 
             <div class="video-player-dock" id="video-player-dock" aria-live="polite">
@@ -1723,6 +1741,7 @@
                 </button>
             </div>
         </div>
+        <button class="start-menu-settings-btn" id="start-menu-settings-btn" type="button" title="Settings" aria-label="Settings">⚙️</button>
         <button class="start-menu-close-btn" id="start-menu-close-btn" type="button" title="Close menu" aria-label="Close menu">✕</button>
     </div>
     <div class="start-menu-search-wrap">

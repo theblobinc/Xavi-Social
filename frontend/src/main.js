@@ -2,6 +2,51 @@ import { BrowserOAuthClient } from '@atproto/oauth-client-browser';
 
 import './app.css';
 
+const COLUMN_WIDTH = 350;
+
+function getEmbedMode() {
+  try {
+    const provided = typeof window.XAVI_SOCIAL_EMBED_MODE === 'string' ? window.XAVI_SOCIAL_EMBED_MODE : '';
+    const normalized = String(provided || '').trim().toLowerCase();
+    if (normalized) return normalized;
+  } catch (e) {
+    // ignore
+  }
+
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    const fromQuery = String(params.get('embed') || '').trim().toLowerCase();
+    return fromQuery;
+  } catch (e) {
+    return '';
+  }
+}
+
+function isEmbedTimeline() {
+  return getEmbedMode() === 'timeline';
+}
+
+function isEmbedPds() {
+  return getEmbedMode() === 'pds';
+}
+
+function isEmbedJetstream() {
+  return getEmbedMode() === 'jetstream';
+}
+
+function isEmbedFirehose() {
+  return getEmbedMode() === 'firehose';
+}
+
+function isEmbedSingleStream() {
+  const mode = getEmbedMode();
+  return mode === 'pds' || mode === 'jetstream' || mode === 'firehose';
+}
+
+function isEmbedSettings() {
+  return getEmbedMode() === 'settings';
+}
+
 const root = (() => {
   try {
     const provided = window.__xaviSocialMountRoot;
@@ -23,7 +68,145 @@ const STORAGE_KEYS = {
   lastHandle: 'xv_atproto_lastHandle',
   theme: 'xavi.theme',
   authPing: 'xavi.auth.ping',
+  workspaceStreamMode: 'xavi.workspaceSettings.streamMode',
+  workspaceJetstreamUrl: 'xavi.workspaceSettings.jetstreamUrl',
+  workspaceFirehoseUrl: 'xavi.workspaceSettings.firehoseUrl',
+  workspaceJetstreamWantedCollections: 'xavi.workspaceSettings.jetstreamWantedCollections',
+  workspaceJetstreamWantedDids: 'xavi.workspaceSettings.jetstreamWantedDids',
 };
+
+function readWorkspaceStreamSettings() {
+  const out = {
+    streamMode: 'jetstream',
+    jetstreamUrl: '',
+    firehoseUrl: '',
+  };
+
+  try {
+    const raw = String(localStorage.getItem(STORAGE_KEYS.workspaceStreamMode) || '').trim().toLowerCase();
+    if (raw === 'jetstream' || raw === 'firehose') {
+      out.streamMode = raw;
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  try {
+    out.jetstreamUrl = String(localStorage.getItem(STORAGE_KEYS.workspaceJetstreamUrl) || '').trim();
+  } catch (e) {
+    // ignore
+  }
+
+  try {
+    out.firehoseUrl = String(localStorage.getItem(STORAGE_KEYS.workspaceFirehoseUrl) || '').trim();
+  } catch (e) {
+    // ignore
+  }
+
+  return out;
+}
+
+function safeLsGet(key, fallback = '') {
+  try {
+    const v = localStorage.getItem(key);
+    return v == null ? fallback : String(v);
+  } catch (e) {
+    return fallback;
+  }
+}
+
+function splitCsv(value) {
+  return String(value || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function splitCsvOrNewlines(value) {
+  return String(value || '')
+    .split(/[\n,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function uniq(arr) {
+  const seen = new Set();
+  const out = [];
+  for (const raw of Array.isArray(arr) ? arr : []) {
+    const v = String(raw || '').trim();
+    if (!v || seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+  }
+  return out;
+}
+
+function safeJsonArrayParse(raw, max) {
+  try {
+    const parsed = JSON.parse(String(raw || ''));
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((v) => String(v || '').trim()).filter(Boolean).slice(0, max);
+  } catch {
+    return [];
+  }
+}
+
+function readWorkspaceJetstreamFilters() {
+  const out = { wantedCollections: [], wantedDids: [] };
+  out.wantedCollections = safeJsonArrayParse(safeLsGet(STORAGE_KEYS.workspaceJetstreamWantedCollections, ''), 20);
+  out.wantedDids = safeJsonArrayParse(safeLsGet(STORAGE_KEYS.workspaceJetstreamWantedDids, ''), 200);
+  return out;
+}
+
+function writeWorkspaceJetstreamFilters({ wantedCollections = [], wantedDids = [] } = {}) {
+  try {
+    localStorage.setItem(
+      STORAGE_KEYS.workspaceJetstreamWantedCollections,
+      JSON.stringify(uniq(wantedCollections).slice(0, 20))
+    );
+  } catch {
+    // ignore
+  }
+  try {
+    localStorage.setItem(STORAGE_KEYS.workspaceJetstreamWantedDids, JSON.stringify(uniq(wantedDids).slice(0, 200)));
+  } catch {
+    // ignore
+  }
+}
+
+function readStreamOverridesFromQuery() {
+  const out = {
+    jetstreamUrl: '',
+    wantedCollections: [],
+    wantedDids: [],
+    firehoseUrl: '',
+  };
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    out.jetstreamUrl = String(params.get('jetstreamUrl') || '').trim();
+    out.firehoseUrl = String(params.get('firehoseUrl') || '').trim();
+    out.wantedCollections = splitCsv(params.get('wantedCollections') || '').slice(0, 20);
+    out.wantedDids = splitCsv(params.get('wantedDids') || '').slice(0, 200);
+  } catch (e) {
+    // ignore
+  }
+  return out;
+}
+
+function hexPrefix(buffer, bytes = 16) {
+  try {
+    const u8 = buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : new Uint8Array(0);
+    const n = Math.min(bytes, u8.length);
+    let out = '';
+    for (let i = 0; i < n; i++) {
+      out += u8[i].toString(16).padStart(2, '0');
+      if (i < n - 1) out += ' ';
+    }
+    return out;
+  } catch (e) {
+    return '';
+  }
+}
 
 function escapeHtml(value) {
   return String(value)
@@ -212,6 +395,20 @@ function setupCrossContextListeners() {
       themePreference = readThemePreference();
       applyThemeToShell();
     }
+
+    // Workspace settings live in localStorage (set via Multi-Grid panel). When the
+    // Timeline is embedded, it should refresh immediately as the stream mode changes.
+    if (
+      event.key === STORAGE_KEYS.workspaceStreamMode ||
+      event.key === STORAGE_KEYS.workspaceJetstreamUrl ||
+      event.key === STORAGE_KEYS.workspaceFirehoseUrl ||
+      event.key === STORAGE_KEYS.workspaceJetstreamWantedCollections ||
+      event.key === STORAGE_KEYS.workspaceJetstreamWantedDids
+    ) {
+      if (isEmbedTimeline() || isEmbedSingleStream()) {
+        window.location.reload();
+      }
+    }
   });
 
   const mql = typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-color-scheme: dark)') : null;
@@ -243,8 +440,15 @@ function renderApp(session, atproto) {
   const userId = session?.userId != null ? String(session.userId) : null;
   const localPdsAccount = session?.localPdsAccount && typeof session.localPdsAccount === 'object' ? session.localPdsAccount : null;
 
+  const workspaceStream = readWorkspaceStreamSettings();
+
   let state = {
     route: { name: 'feed' },
+    build: {
+      loading: true,
+      error: null,
+      info: null,
+    },
     feed: {
       loading: true,
       loadingMore: false,
@@ -254,24 +458,56 @@ function renderApp(session, atproto) {
       cachedCursor: '',
       hasMore: true,
     },
+    jetstream: {
+      loading: true,
+      loadingMore: false,
+      error: null,
+      items: [],
+      source: '',
+      cachedCursor: '',
+      hasMore: false,
+    },
+    firehose: {
+      loading: true,
+      loadingMore: false,
+      error: null,
+      items: [],
+      source: '',
+      cachedCursor: '',
+      hasMore: false,
+    },
+    columnOrder: ['pds', 'jetstream'],
     thread: { loading: false, error: null, uri: null, post: null, replies: [] },
     profile: { loading: false, error: null, actor: null, profile: null, feed: [] },
     notifications: { loading: false, error: null, items: [] },
     posting: false,
     postError: null,
     connectError: null,
-      accounts: {
-        loading: false,
-        error: null,
-        items: [],
-      },
-      search: {
-        loading: false,
-        error: null,
-        q: '',
-        items: [],
-      },
+    accounts: {
+      loading: false,
+      error: null,
+      items: [],
+    },
+    search: {
+      loading: false,
+      error: null,
+      q: '',
+      items: [],
+    },
   };
+
+  // Embed modes:
+  // - timeline: the default two-column UI
+  // - pds/jetstream/firehose: single-column stream panels
+  if (isEmbedPds()) {
+    state.columnOrder = ['pds'];
+  } else if (isEmbedJetstream()) {
+    state.columnOrder = ['jetstream'];
+  } else if (isEmbedFirehose()) {
+    state.columnOrder = ['firehose'];
+  } else {
+    state.columnOrder = ['pds', 'jetstream'];
+  }
 
   const atprotoSession = atproto?.session || null;
   const atprotoClientFactory = atproto?.getClient || null;
@@ -282,6 +518,14 @@ function renderApp(session, atproto) {
   let _feedPollTimer = null;
   let _feedPollAbortController = null;
   let _loadMoreAbortController = null;
+  let _columnDrag = null;
+
+  let _jetstreamWs = null;
+  let _firehoseWs = null;
+  const _jetstreamDidToHandle = new Map();
+  let _jetstreamPaintTick = 0;
+  let _firehosePaintTick = 0;
+  let _firehoseSeq = 0;
 
   function isAbortError(err) {
     return Boolean(err && (err.name === 'AbortError' || err.code === 20));
@@ -294,6 +538,40 @@ function renderApp(session, atproto) {
     root.addEventListener('submit', async (e) => {
       const form = e.target;
       if (!(form instanceof HTMLFormElement)) return;
+
+      const formType = form.getAttribute('data-form') || '';
+
+      if (formType === 'jetstream-embed-settings') {
+        e.preventDefault();
+        const url = String(form.querySelector('[name="jetstreamUrl"]')?.value || '').trim();
+        const collectionsRaw = String(form.querySelector('[name="wantedCollections"]')?.value || '');
+        const didsRaw = String(form.querySelector('[name="wantedDids"]')?.value || '');
+
+        const wantedCollections = uniq(splitCsvOrNewlines(collectionsRaw)).slice(0, 20);
+        const wantedDids = uniq(splitCsvOrNewlines(didsRaw)).slice(0, 200);
+
+        try {
+          localStorage.setItem(STORAGE_KEYS.workspaceJetstreamUrl, url);
+        } catch {
+          // ignore
+        }
+        writeWorkspaceJetstreamFilters({ wantedCollections, wantedDids });
+
+        await loadForCurrentRoute();
+        return;
+      }
+
+      if (formType === 'firehose-embed-settings') {
+        e.preventDefault();
+        const url = String(form.querySelector('[name="firehoseUrl"]')?.value || '').trim();
+        try {
+          localStorage.setItem(STORAGE_KEYS.workspaceFirehoseUrl, url);
+        } catch {
+          // ignore
+        }
+        await loadForCurrentRoute();
+        return;
+      }
 
       if (form.id === 'post-form') {
         e.preventDefault();
@@ -427,11 +705,58 @@ function renderApp(session, atproto) {
       // Prevent default for all action buttons (some are placeholders).
       e.preventDefault();
 
+      if (action === 'reset-jetstream-embed-settings') {
+        try {
+          localStorage.removeItem(STORAGE_KEYS.workspaceJetstreamUrl);
+        } catch {
+          // ignore
+        }
+        try {
+          localStorage.removeItem(STORAGE_KEYS.workspaceJetstreamWantedCollections);
+        } catch {
+          // ignore
+        }
+        try {
+          localStorage.removeItem(STORAGE_KEYS.workspaceJetstreamWantedDids);
+        } catch {
+          // ignore
+        }
+        await loadForCurrentRoute();
+        return;
+      }
+
+      if (action === 'reset-firehose-embed-settings') {
+        try {
+          localStorage.removeItem(STORAGE_KEYS.workspaceFirehoseUrl);
+        } catch {
+          // ignore
+        }
+        await loadForCurrentRoute();
+        return;
+      }
+
       if (action === 'remove-account') {
         const id = btn.getAttribute('data-account-id');
         if (!id) return;
         await deleteLinkedAccount(id);
       }
+    });
+
+    root.addEventListener('pointerdown', (e) => {
+      const handle = e.target instanceof Element ? e.target.closest('[data-action="drag-column"]') : null;
+      if (!handle) return;
+      const colId = handle.getAttribute('data-col-id') || '';
+      if (!colId) return;
+      _columnDrag = { colId };
+    });
+
+    root.addEventListener('pointerup', (e) => {
+      if (!_columnDrag) return;
+      finishColumnDrag(e.clientX);
+    });
+
+    root.addEventListener('pointercancel', () => {
+      _columnDrag = null;
     });
   }
 
@@ -544,6 +869,9 @@ function renderApp(session, atproto) {
   }
 
   function parseRouteFromLocation() {
+    // Embed modes clamp routing to a single view.
+    if (isEmbedTimeline() || isEmbedSettings() || isEmbedSingleStream()) return { name: 'feed' };
+
     const raw = (window.location.hash || '').replace(/^#/, '').trim();
     if (!raw) return { name: 'feed' };
 
@@ -684,6 +1012,9 @@ function renderApp(session, atproto) {
   }
 
   function renderNav() {
+    if (isEmbedTimeline() || isEmbedSettings() || isEmbedSingleStream()) {
+      return '';
+    }
     const active = state.route?.name || 'feed';
     const tab = (name, label, href) => {
       const isActive = active === name;
@@ -723,18 +1054,96 @@ function renderApp(session, atproto) {
   }
 
 
-  function renderFeedBody() {
-    if (state.feed.loading) {
-      return `<div class="panel panel-default"><div class="panel-body text-muted">Loading…</div></div>`;
+
+  function getPrimaryFeedEl() {
+    if (!root) return null;
+    return root.querySelector('.xv-feed[data-col-body="pds"]') || root.querySelector('.xv-feed');
+  }
+
+  function captureFeedAnchor() {
+    if (!root || state.route?.name !== 'feed') return null;
+    const feedEl = getPrimaryFeedEl();
+    if (!feedEl) return null;
+    const first = feedEl.querySelector('.xv-post');
+    if (!first) return null;
+    const rect = first.getBoundingClientRect();
+    return {
+      id: first.getAttribute('data-id') || '',
+      top: rect.top,
+    };
+  }
+
+  function restoreFeedAnchor(anchor) {
+    if (!anchor || !root || state.route?.name !== 'feed') return;
+    const feedEl = getPrimaryFeedEl();
+    if (!feedEl) return;
+    const posts = Array.from(feedEl.querySelectorAll('.xv-post'));
+    const match = posts.find((p) => (p.getAttribute('data-id') || '') === anchor.id) || posts[0];
+    if (!match) return;
+    const rect = match.getBoundingClientRect();
+    const delta = rect.top - anchor.top;
+    if (Math.abs(delta) > 1) {
+      window.scrollBy(0, delta);
+    }
+  }
+
+  function setFeedItems(nextItems, { preserveScroll = false } = {}) {
+    const anchor = preserveScroll ? captureFeedAnchor() : null;
+    state.feed.items = nextItems;
+    paint();
+    if (anchor && preserveScroll) {
+      queueMicrotask(() => restoreFeedAnchor(anchor));
+    }
+  }
+
+  function renderFeedSkeleton(count = 3) {
+    const cards = Array.from({ length: count }).map(() => {
+      return `
+        <article class="panel panel-default xv-post xv-skeleton-card">
+          <div class="panel-body">
+            <div class="media">
+              <div class="media-left">
+                <span class="xv-avatar xv-skeleton-block"></span>
+              </div>
+              <div class="media-body">
+                <div class="xv-skeleton-line" style="width: 40%;"></div>
+                <div class="xv-skeleton-line" style="width: 95%;"></div>
+                <div class="xv-skeleton-line" style="width: 88%;"></div>
+              </div>
+            </div>
+          </div>
+        </article>
+      `;
+    });
+    return cards.join('');
+  }
+
+  function renderFeedState(title, body) {
+    return `
+      <div class="panel panel-default xv-feed-state">
+        <div class="panel-body">
+          <div class="xv-feed-state__title">${escapeHtml(title)}</div>
+          <div class="text-muted">${escapeHtml(body)}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderFeedBody(feedState = state.feed, options = {}) {
+    const sentinelId = options.sentinelId || 'feed-sentinel';
+    const showSentinel = options.showSentinel !== false;
+
+    if (feedState.loading) {
+      return renderFeedSkeleton(4);
     }
 
-    if (state.feed.error) {
-      return `<div class="panel panel-default"><div class="panel-body">${escapeHtml(String(state.feed.error))}</div></div>`;
+    if (feedState.error) {
+      return renderFeedState('Feed failed to load', feedState.error || 'Please retry.');
     }
 
-    const items = Array.isArray(state.feed.items) ? state.feed.items : [];
+    const items = Array.isArray(feedState.items) ? feedState.items : [];
     if (items.length === 0) {
-      return `<div class="panel panel-default"><div class="panel-body text-muted">No posts yet.</div></div>`;
+      return renderFeedState('No posts yet', 'Try refreshing or connecting an account.');
     }
 
     const feedHtml = items
@@ -770,12 +1179,17 @@ function renderApp(session, atproto) {
       })
       .join('');
 
-    const moreLabel = state.feed.loadingMore
+    const moreLabel = feedState.loadingMore
       ? 'Loading more…'
-      : state.feed.hasMore
+      : feedState.hasMore
         ? ' '
         : 'No more posts.';
-    return `${feedHtml}<div id="feed-sentinel" class="text-muted small" style="padding: 10px 0;">${escapeHtml(moreLabel)}</div>`;
+
+    const sentinelHtml = showSentinel
+      ? `<div id="${escapeHtml(sentinelId)}" class="text-muted small" style="padding: 10px 0;">${escapeHtml(moreLabel)}</div>`
+      : '';
+
+    return `${feedHtml}${sentinelHtml}`;
   }
 
   function getScrollTop() {
@@ -832,8 +1246,7 @@ function renderApp(session, atproto) {
         const existing = Array.isArray(state.feed.items) ? state.feed.items : [];
         const merged = mergeAndSortItems(existing, localItems);
         if (merged.length !== existing.length) {
-          state.feed.items = merged;
-          paint();
+          setFeedItems(merged, { preserveScroll: true });
         }
       } catch (err) {
         if (isAbortError(err)) return;
@@ -895,11 +1308,11 @@ function renderApp(session, atproto) {
       const nextCursor = typeof json?.cachedCursor === 'string' ? json.cachedCursor : '';
 
       const existing = Array.isArray(state.feed.items) ? state.feed.items : [];
-      state.feed.items = mergeAndSortItems(existing, items);
+      const merged = mergeAndSortItems(existing, items);
       state.feed.cachedCursor = nextCursor;
       state.feed.hasMore = Boolean(nextCursor);
       state.feed.loadingMore = false;
-      paint();
+      setFeedItems(merged, { preserveScroll: true });
     } catch (err) {
       if (isAbortError(err)) return;
       state.feed.loadingMore = false;
@@ -1258,14 +1671,296 @@ function renderApp(session, atproto) {
   }
 
   function renderRightColumn() {
+    const jetstreamStatus = state.jetstream?.error ? 'unavailable' : state.jetstream?.source || 'unknown';
+    const orderList = Array.isArray(state.columnOrder) ? state.columnOrder : [];
+    const orderLabel = orderList.length ? orderList.join(' | ') : 'pds | jetstream';
+
+    const buildInfo = state.build?.info && typeof state.build.info === 'object' ? state.build.info : null;
+    const buildLine = state.build?.loading
+      ? '<div class="text-muted small">Build: <strong>loading…</strong></div>'
+      : state.build?.error
+        ? `<div class="text-muted small">Build: <strong>${escapeHtml(String(state.build.error))}</strong></div>`
+        : buildInfo
+          ? `<div class="text-muted small">Build: <strong>${escapeHtml(buildInfo.pkgVersion || '')}${buildInfo.gitSha ? ' ' + escapeHtml(buildInfo.gitSha) : ''}</strong> <span style="opacity:0.8;">${escapeHtml(buildInfo.builtAt || '')}</span></div>`
+          : '<div class="text-muted small">Build: <strong>unknown</strong></div>';
+
     return `
       <div class="panel panel-default">
         <div class="panel-heading"><strong>Info</strong></div>
         <div class="panel-body">
-          <div class="text-muted small">Timeline source: <strong>${escapeHtml(state.feed.source || '…')}</strong></div>
+          <div class="text-muted small">PDS: <strong>${escapeHtml(state.feed.source || 'unknown')}</strong></div>
+          <div class="text-muted small">Jetstream: <strong>${escapeHtml(jetstreamStatus)}</strong></div>
+          <div class="text-muted small">Columns: <strong>${escapeHtml(orderLabel)}</strong></div>
+          ${buildLine}
         </div>
       </div>
     `;
+  }
+
+  function getPackageBaseUrl() {
+    const base = typeof window.XAVI_MULTIGRID_BASE === 'string' ? String(window.XAVI_MULTIGRID_BASE) : '';
+    if (base.includes('/packages/xavi_social/')) {
+      return base.replace(/\/multigrid\/?$/, '');
+    }
+    return '/packages/xavi_social';
+  }
+
+  async function loadBuildStamp() {
+    state.build.loading = true;
+    state.build.error = null;
+    paint();
+
+    try {
+      const v = typeof window.XAVI_ASSET_VERSION !== 'undefined' ? String(window.XAVI_ASSET_VERSION) : String(Date.now());
+      const url = `${getPackageBaseUrl()}/dist/build.json?v=${encodeURIComponent(v)}`;
+      const res = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const json = await res.json();
+      state.build.loading = false;
+      state.build.error = null;
+      state.build.info = json && typeof json === 'object' ? json : null;
+      paint();
+    } catch (err) {
+      state.build.loading = false;
+      state.build.error = err?.message || String(err);
+      state.build.info = null;
+      paint();
+    }
+  }
+
+  function getColumnMeta(colId) {
+    const id = colId || 'column';
+    if (id === 'pds') {
+      return {
+        id,
+        title: 'PDS Feed',
+        subtitle: state.feed.source ? `Source: ${state.feed.source}` : 'Local timeline',
+        feedState: state.feed,
+        composer: true,
+        sentinelId: 'feed-sentinel',
+        showSentinel: true,
+      };
+    }
+    if (id === 'jetstream') {
+      const subtitle = state.jetstream.error
+        ? state.jetstream.error
+        : state.jetstream.source
+          ? `Source: ${state.jetstream.source}`
+          : 'Bluesky Jetstream';
+      return {
+        id,
+        title: 'Jetstream',
+        subtitle,
+        feedState: state.jetstream,
+        composer: false,
+        sentinelId: 'jetstream-sentinel',
+        showSentinel: false,
+      };
+    }
+    if (id === 'firehose') {
+      const subtitle = state.firehose.error
+        ? state.firehose.error
+        : state.firehose.source
+          ? `Source: ${state.firehose.source}`
+          : 'ATProto Firehose';
+      return {
+        id,
+        title: 'Firehose',
+        subtitle,
+        feedState: state.firehose,
+        composer: false,
+        sentinelId: 'firehose-sentinel',
+        showSentinel: false,
+      };
+    }
+    return {
+      id,
+      title: 'Reserved',
+      subtitle: 'Unused column',
+      feedState: { loading: false, loadingMore: false, error: 'This column is empty.', items: [], hasMore: false },
+      composer: false,
+      sentinelId: `${id}-sentinel`,
+      showSentinel: false,
+    };
+  }
+
+  function renderTimelineColumn(colId, index) {
+    const meta = getColumnMeta(colId);
+    const feedContent =
+      meta.id === 'firehose'
+        ? renderFirehoseBody(meta.feedState)
+        : renderFeedBody(meta.feedState, { sentinelId: meta.sentinelId, showSentinel: meta.showSentinel });
+
+    const embedControls = (() => {
+      if (!isEmbedSingleStream()) return '';
+
+      const overrides = readStreamOverridesFromQuery();
+      const liveWorkspaceStream = readWorkspaceStreamSettings();
+
+      if (meta.id === 'jetstream' && isEmbedJetstream()) {
+        const storedFilters = readWorkspaceJetstreamFilters();
+        const jetstreamUrl = (overrides.jetstreamUrl || liveWorkspaceStream.jetstreamUrl || '').trim();
+        const wantedCollections =
+          Array.isArray(overrides.wantedCollections) && overrides.wantedCollections.length
+            ? overrides.wantedCollections
+            : storedFilters.wantedCollections;
+        const wantedDids =
+          Array.isArray(overrides.wantedDids) && overrides.wantedDids.length ? overrides.wantedDids : storedFilters.wantedDids;
+
+        const collectionsText = (wantedCollections || []).join('\n');
+        const didsText = (wantedDids || []).join('\n');
+
+        return `
+          <form data-form="jetstream-embed-settings" class="panel panel-default" style="margin: 0 0 10px 0;">
+            <div class="panel-heading" style="display:flex; justify-content: space-between; align-items: center; gap: 8px;">
+              <strong>Connection</strong>
+              <button type="button" class="btn btn-default btn-xs" data-action="reset-jetstream-embed-settings">Reset</button>
+            </div>
+            <div class="panel-body" style="padding: 10px;">
+              <div class="form-group" style="margin-bottom: 8px;">
+                <label class="text-muted small" style="margin-bottom: 4px;">Jetstream WS URL</label>
+                <input class="form-control input-sm" name="jetstreamUrl" placeholder="wss://…" value="${escapeHtml(jetstreamUrl)}" />
+              </div>
+              <div class="form-group" style="margin-bottom: 8px;">
+                <label class="text-muted small" style="margin-bottom: 4px;">wantedCollections (one per line; max 20)</label>
+                <textarea class="form-control input-sm" name="wantedCollections" rows="2" placeholder="app.bsky.feed.post\napp.bsky.feed.like">${escapeHtml(
+                  collectionsText
+                )}</textarea>
+              </div>
+              <div class="form-group" style="margin-bottom: 10px;">
+                <label class="text-muted small" style="margin-bottom: 4px;">wantedDids (one per line; max 200)</label>
+                <textarea class="form-control input-sm" name="wantedDids" rows="2" placeholder="did:plc:…">${escapeHtml(
+                  didsText
+                )}</textarea>
+              </div>
+              <div style="display:flex; gap: 8px; align-items: center; justify-content: flex-end;">
+                <button type="submit" class="btn btn-primary btn-sm">Save & reconnect</button>
+              </div>
+              ${state.jetstream?.source ? `<div class="text-muted small" style="margin-top: 8px;">Active: ${escapeHtml(String(state.jetstream.source))}</div>` : ''}
+            </div>
+          </form>
+        `;
+      }
+
+      if (meta.id === 'firehose' && isEmbedFirehose()) {
+        const firehoseUrl = (overrides.firehoseUrl || liveWorkspaceStream.firehoseUrl || '').trim();
+        return `
+          <form data-form="firehose-embed-settings" class="panel panel-default" style="margin: 0 0 10px 0;">
+            <div class="panel-heading" style="display:flex; justify-content: space-between; align-items: center; gap: 8px;">
+              <strong>Connection</strong>
+              <button type="button" class="btn btn-default btn-xs" data-action="reset-firehose-embed-settings">Reset</button>
+            </div>
+            <div class="panel-body" style="padding: 10px;">
+              <div class="form-group" style="margin-bottom: 10px;">
+                <label class="text-muted small" style="margin-bottom: 4px;">Firehose WS URL</label>
+                <input class="form-control input-sm" name="firehoseUrl" placeholder="wss://…" value="${escapeHtml(firehoseUrl)}" />
+              </div>
+              <div style="display:flex; gap: 8px; align-items: center; justify-content: flex-end;">
+                <button type="submit" class="btn btn-primary btn-sm">Save & reconnect</button>
+              </div>
+              ${state.firehose?.source ? `<div class="text-muted small" style="margin-top: 8px;">Active: ${escapeHtml(String(state.firehose.source))}</div>` : ''}
+            </div>
+          </form>
+        `;
+      }
+
+      return '';
+    })();
+    const handleBtn = isEmbedSingleStream()
+      ? ''
+      : `<button type="button" class="xv-column__handle" data-action="drag-column" data-col-id="${escapeHtml(meta.id)}" title="Drag or swipe to reorder">::</button>`;
+    return `
+      <section class="xv-column" data-col-id="${escapeHtml(meta.id)}" data-col-index="${escapeHtml(String(index))}">
+        <div class="xv-column__header">
+          <div>
+            <div class="xv-column__title">${escapeHtml(meta.title)}</div>
+            <div class="xv-column__meta">${escapeHtml(meta.subtitle)}</div>
+          </div>
+          ${handleBtn}
+        </div>
+        <div class="xv-feed-wrapper">
+          ${embedControls}
+          ${meta.composer && state.route?.name === 'feed' ? renderComposer() : ''}
+          <div class="xv-feed" data-col-body="${escapeHtml(meta.id)}">${feedContent}</div>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderFirehoseBody(feedState = state.firehose) {
+    if (feedState.loading) {
+      return renderFeedState('Connecting…', 'Waiting for binary frames.');
+    }
+    if (feedState.error) {
+      return renderFeedState('Firehose error', feedState.error || 'Please retry.');
+    }
+
+    const items = Array.isArray(feedState.items) ? feedState.items : [];
+    if (items.length === 0) {
+      return renderFeedState('No events yet', 'Once connected, frames will appear here.');
+    }
+
+    return items
+      .map((it) => {
+        const seq = it && it.seq != null ? String(it.seq) : '';
+        const bytes = it && it.bytes != null ? String(it.bytes) : '';
+        const prefix = it && it.prefix ? String(it.prefix) : '';
+        const at = it && it.receivedAt ? String(it.receivedAt) : '';
+        return `
+          <article class="panel panel-default xv-post" data-id="firehose:${escapeHtml(seq)}">
+            <div class="panel-body">
+              <div class="text-muted small" style="display:flex; justify-content: space-between; gap: 10px;">
+                <div><strong>#${escapeHtml(seq)}</strong> ${bytes ? `${escapeHtml(bytes)} bytes` : ''}</div>
+                <div>${escapeHtml(at)}</div>
+              </div>
+              ${prefix ? `<pre class="text-muted" style="margin-top: 8px; margin-bottom: 0; font-size: 11px; line-height: 1.3; white-space: pre-wrap;">${escapeHtml(prefix)}</pre>` : ''}
+            </div>
+          </article>
+        `;
+      })
+      .join('');
+  }
+
+  function renderTimelineGrid() {
+    const order = Array.isArray(state.columnOrder) && state.columnOrder.length ? state.columnOrder : ['pds', 'jetstream'];
+    const cols = order.map((id, idx) => renderTimelineColumn(id, idx)).join('');
+    return `
+      <div class="xv-lightbox">
+        <div class="xv-lightbox__content">
+          <div class="xv-column-grid" style="--xv-column-width:${COLUMN_WIDTH}px;" aria-label="Timeline columns">
+            ${cols}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function reorderColumns(colId, targetIndex) {
+    const order = Array.isArray(state.columnOrder) ? [...state.columnOrder] : [];
+    const currentIndex = order.indexOf(colId);
+    if (currentIndex === -1 || targetIndex === currentIndex) return;
+    if (targetIndex < 0 || targetIndex >= order.length) return;
+    order.splice(currentIndex, 1);
+    order.splice(targetIndex, 0, colId);
+    state.columnOrder = order;
+    paint();
+  }
+
+  function finishColumnDrag(clientX) {
+    if (!_columnDrag) return;
+    const grid = root?.querySelector('.xv-column-grid');
+    const order = Array.isArray(state.columnOrder) ? state.columnOrder : [];
+    if (!grid || !order.length) {
+      _columnDrag = null;
+      return;
+    }
+    const rect = grid.getBoundingClientRect();
+    const relativeX = clientX - rect.left;
+    const targetIndex = Math.max(0, Math.min(order.length - 1, Math.floor(relativeX / COLUMN_WIDTH)));
+    reorderColumns(_columnDrag.colId, targetIndex);
+    _columnDrag = null;
   }
 
   function paint() {
@@ -1275,47 +1970,73 @@ function renderApp(session, atproto) {
     const themeForRender = resolveTheme(themePreference);
     activeTheme = themeForRender;
 
+    const isFeedRoute = route.name === 'feed';
     let centerTitle = 'Timeline';
-    let centerBody = renderFeedBody();
+    let centerBodyMarkup = renderTimelineGrid();
+    let headerNote = 'Drag or swipe columns to reorder';
+
     if (route.name === 'thread') {
       centerTitle = 'Thread';
-      centerBody = renderThreadBody();
+      centerBodyMarkup = renderThreadBody();
+      headerNote = '';
     } else if (route.name === 'notifications') {
       centerTitle = 'Notifications';
-      centerBody = renderNotificationsBody();
+      centerBodyMarkup = renderNotificationsBody();
+      headerNote = '';
     } else if (route.name === 'profile') {
       centerTitle = 'Profile';
-      centerBody = renderProfileBody();
+      centerBodyMarkup = renderProfileBody();
+      headerNote = '';
     } else if (route.name === 'media') {
       centerTitle = 'Media';
-      centerBody = renderMediaBody();
+      centerBodyMarkup = renderMediaBody();
+      headerNote = '';
     } else if (route.name === 'search') {
       centerTitle = 'Search';
-      centerBody = renderSearchBody(route.query);
+      centerBodyMarkup = renderSearchBody(route.query);
+      headerNote = '';
     }
 
-    root.innerHTML = `
-      <div class="xv-shell" data-theme="${escapeHtml(themeForRender)}" data-theme-pref="${escapeHtml(themePreference)}">
-        <div class="xv-layout">
-          <aside class="xv-col xv-left" aria-label="Sidebar">
-            ${renderLeftColumn()}
-          </aside>
-
-          <main class="xv-col xv-center" aria-label="Feed">
-            ${renderNav()}
-            <div class="xv-header" style="margin-top: 10px;">
-              <h2 class="h3" style="margin-top: 0; margin-bottom: 0;">${escapeHtml(centerTitle)}</h2>
-            </div>
-            ${route.name === 'feed' ? renderComposer() : ''}
-            <div id="feed" class="xv-feed">${centerBody}</div>
-          </main>
-
-          <aside class="xv-col xv-right" aria-label="Details">
-            ${renderRightColumn()}
-          </aside>
+    if (isEmbedTimeline()) {
+      root.innerHTML = `
+        <div class="xv-shell" data-theme="${escapeHtml(themeForRender)}" data-theme-pref="${escapeHtml(themePreference)}">
+          <div class="xv-embed xv-embed-timeline">
+            ${centerBodyMarkup}
+          </div>
         </div>
-      </div>
-    `;
+      `;
+    } else if (isEmbedSettings()) {
+      root.innerHTML = `
+        <div class="xv-shell" data-theme="${escapeHtml(themeForRender)}" data-theme-pref="${escapeHtml(themePreference)}">
+          <div class="xv-embed xv-embed-settings" style="max-width:${COLUMN_WIDTH}px;">
+            ${renderLeftColumn()}
+          </div>
+        </div>
+      `;
+    } else {
+      root.innerHTML = `
+        <div class="xv-shell" data-theme="${escapeHtml(themeForRender)}" data-theme-pref="${escapeHtml(themePreference)}">
+          <div class="xv-layout">
+            <aside class="xv-col xv-left" aria-label="Sidebar">
+              ${renderLeftColumn()}
+            </aside>
+
+            <main class="xv-col xv-center" aria-label="Feed">
+              ${renderNav()}
+              <div class="xv-header" style="margin-top: 10px; ${isFeedRoute ? 'justify-content: space-between; align-items: center;' : ''}">
+                <h2 class="h3" style="margin-top: 0; margin-bottom: 0;">${escapeHtml(centerTitle)}</h2>
+                ${isFeedRoute && headerNote ? `<div class="text-muted small">${escapeHtml(headerNote)}</div>` : ''}
+              </div>
+              ${isFeedRoute ? centerBodyMarkup : `<div id="feed" class="xv-feed">${centerBodyMarkup}</div>`}
+            </main>
+
+            <aside class="xv-col xv-right" aria-label="Details">
+              ${renderRightColumn()}
+            </aside>
+          </div>
+        </div>
+      `;
+    }
 
     applyThemeToShell();
 
@@ -1325,74 +2046,375 @@ function renderApp(session, atproto) {
   }
 
   async function loadTimeline(signal) {
+    const workspaceStream = readWorkspaceStreamSettings();
+    const wantsPds = Array.isArray(state.columnOrder) && state.columnOrder.includes('pds');
+    const wantsJetstream = Array.isArray(state.columnOrder) && state.columnOrder.includes('jetstream');
+    const wantsFirehose = Array.isArray(state.columnOrder) && state.columnOrder.includes('firehose');
+
+    const overrides = readStreamOverridesFromQuery();
+    const jetstreamUrl = (overrides.jetstreamUrl || workspaceStream.jetstreamUrl || '').trim();
+    const storedFilters = readWorkspaceJetstreamFilters();
+    const wantedCollections =
+      Array.isArray(overrides.wantedCollections) && overrides.wantedCollections.length
+        ? overrides.wantedCollections
+        : storedFilters.wantedCollections;
+    const wantedDids =
+      Array.isArray(overrides.wantedDids) && overrides.wantedDids.length ? overrides.wantedDids : storedFilters.wantedDids;
+    const firehoseUrl = (overrides.firehoseUrl || workspaceStream.firehoseUrl || '').trim();
+
+    const stopJetstream = () => {
+      if (_jetstreamWs) {
+        try {
+          _jetstreamWs.onopen = null;
+          _jetstreamWs.onmessage = null;
+          _jetstreamWs.onerror = null;
+          _jetstreamWs.onclose = null;
+          _jetstreamWs.close();
+        } catch {
+          // ignore
+        }
+        _jetstreamWs = null;
+      }
+    };
+
+    const stopFirehose = () => {
+      if (_firehoseWs) {
+        try {
+          _firehoseWs.onopen = null;
+          _firehoseWs.onmessage = null;
+          _firehoseWs.onerror = null;
+          _firehoseWs.onclose = null;
+          _firehoseWs.close();
+        } catch {
+          // ignore
+        }
+        _firehoseWs = null;
+      }
+    };
+
+    const startJetstream = () => {
+      if (_jetstreamWs) return;
+      if (!jetstreamUrl) {
+        state.jetstream.loading = false;
+        state.jetstream.error = 'No Jetstream URL configured.';
+        state.jetstream.source = 'jetstream';
+        paint();
+        return;
+      }
+
+      let wsUrl;
+      try {
+        const url = new URL(jetstreamUrl);
+        if (wantedCollections.length) url.searchParams.set('wantedCollections', wantedCollections.join(','));
+        if (wantedDids.length) url.searchParams.set('wantedDids', wantedDids.join(','));
+        wsUrl = url.toString();
+      } catch {
+        state.jetstream.loading = false;
+        state.jetstream.error = 'Invalid Jetstream URL.';
+        state.jetstream.source = 'jetstream';
+        paint();
+        return;
+      }
+
+      state.jetstream.loading = true;
+      state.jetstream.error = null;
+      state.jetstream.source = wsUrl;
+      paint();
+
+      try {
+        const ws = new WebSocket(wsUrl);
+        _jetstreamWs = ws;
+        ws.onopen = () => {
+          state.jetstream.loading = false;
+          state.jetstream.error = null;
+          paint();
+        };
+        ws.onmessage = (ev) => {
+          if (!ev || typeof ev.data !== 'string') return;
+          let msg;
+          try {
+            msg = JSON.parse(ev.data);
+          } catch {
+            return;
+          }
+
+          // Jetstream frames vary; we only handle common shapes.
+          const identity = msg && (msg.kind === 'identity' || msg.type === 'identity') ? msg : null;
+          const commit = msg && (msg.kind === 'commit' || msg.type === 'commit') ? msg : null;
+
+          if (identity) {
+            const did = String(identity.did || '').trim();
+            const handle = String(identity.handle || '').trim();
+            if (did && handle) {
+              _jetstreamDidToHandle.set(did, handle);
+            }
+            return;
+          }
+
+          if (!commit) return;
+
+          const ops = Array.isArray(commit.ops) ? commit.ops : [];
+          const time = String(commit.time || commit.createdAt || new Date().toISOString());
+          const repo = String(commit.repo || commit.did || '').trim();
+          const handle = repo ? _jetstreamDidToHandle.get(repo) || '' : '';
+
+          for (const op of ops) {
+            if (!op || op.action !== 'create') continue;
+            const path = String(op.path || '').trim();
+            if (!path.startsWith('app.bsky.feed.post/')) continue;
+
+            const record = op.record && typeof op.record === 'object' ? op.record : null;
+            const text = record && typeof record.text === 'string' ? record.text : String(record?.text || '');
+            const createdAt = record && record.createdAt ? String(record.createdAt) : time;
+            const rkey = path.split('/')[1] || '';
+            const uri = repo && rkey ? `at://${repo}/app.bsky.feed.post/${rkey}` : '';
+
+            const item = {
+              uri,
+              cid: op.cid ? String(op.cid) : '',
+              text,
+              createdAt,
+              indexedAt: createdAt,
+              author: {
+                did: repo,
+                handle,
+                displayName: handle ? `@${handle}` : repo ? repo : 'Account',
+                avatar: '',
+              },
+              replyCount: null,
+              repostCount: null,
+              likeCount: null,
+            };
+
+            const existing = Array.isArray(state.jetstream.items) ? state.jetstream.items : [];
+            const next = [item, ...existing].slice(0, 200);
+            state.jetstream.items = next;
+
+            // Throttle repaint a bit under heavy traffic.
+            _jetstreamPaintTick++;
+            if (_jetstreamPaintTick % 3 === 0) {
+              paint();
+            }
+          }
+        };
+        ws.onerror = () => {
+          state.jetstream.loading = false;
+          state.jetstream.error = 'Jetstream connection error.';
+          paint();
+        };
+        ws.onclose = () => {
+          _jetstreamWs = null;
+          if (wantsJetstream) {
+            state.jetstream.loading = false;
+            state.jetstream.error = state.jetstream.error || 'Jetstream disconnected.';
+            paint();
+          }
+        };
+      } catch {
+        state.jetstream.loading = false;
+        state.jetstream.error = 'Failed to start Jetstream.';
+        paint();
+      }
+    };
+
+    const startFirehose = () => {
+      if (_firehoseWs) return;
+      const url = firehoseUrl || 'wss://bsky.network/xrpc/com.atproto.sync.subscribeRepos';
+
+      state.firehose.loading = true;
+      state.firehose.error = null;
+      state.firehose.source = url;
+      paint();
+
+      try {
+        const ws = new WebSocket(url);
+        ws.binaryType = 'arraybuffer';
+        _firehoseWs = ws;
+
+        ws.onopen = () => {
+          state.firehose.loading = false;
+          state.firehose.error = null;
+          paint();
+        };
+
+        ws.onmessage = (ev) => {
+          const data = ev ? ev.data : null;
+          if (!(data instanceof ArrayBuffer)) {
+            return;
+          }
+          const bytes = data.byteLength;
+          const entry = {
+            seq: ++_firehoseSeq,
+            bytes,
+            prefix: hexPrefix(data, 24),
+            receivedAt: new Date().toISOString(),
+          };
+
+          const existing = Array.isArray(state.firehose.items) ? state.firehose.items : [];
+          const next = [entry, ...existing].slice(0, 300);
+          state.firehose.items = next;
+
+          _firehosePaintTick++;
+          if (_firehosePaintTick % 4 === 0) {
+            paint();
+          }
+        };
+
+        ws.onerror = () => {
+          state.firehose.loading = false;
+          state.firehose.error = 'Firehose connection error.';
+          paint();
+        };
+
+        ws.onclose = () => {
+          _firehoseWs = null;
+          if (wantsFirehose) {
+            state.firehose.loading = false;
+            state.firehose.error = state.firehose.error || 'Firehose disconnected.';
+            paint();
+          }
+        };
+      } catch {
+        state.firehose.loading = false;
+        state.firehose.error = 'Failed to start Firehose.';
+        paint();
+      }
+    };
+
     state.feed.loading = true;
     state.feed.error = null;
     state.feed.hasMore = true;
     state.feed.loadingMore = false;
+    state.feed.items = [];
+    state.feed.source = '';
+
+    state.jetstream.loading = true;
+    state.jetstream.error = null;
+    state.jetstream.items = [];
+    state.jetstream.source = '';
+    state.jetstream.hasMore = false;
+    state.jetstream.loadingMore = false;
+
+    state.firehose.loading = true;
+    state.firehose.error = null;
+    state.firehose.items = [];
+    state.firehose.source = '';
+    state.firehose.hasMore = false;
+    state.firehose.loadingMore = false;
+
     paint();
 
-    try {
-      const limit = 30;
+    const limit = 30;
 
-      let localItems = [];
-      let localSource = null;
-      let remoteItems = [];
+    let pdsError = null;
+    let jetError = null;
+    let fireError = null;
 
-      const errors = [];
-
-      // Always fetch the local timeline. For guests, the API returns the public cached/Jetstream feed.
-      // For logged-in Concrete users, it can return their local PDS feed.
+    if (wantsPds) {
       try {
         const localResp = await fetchJson(`${apiUrl('feed')}?limit=${limit}`, { signal });
-        localSource = localResp?.source || null;
-        localItems = Array.isArray(localResp?.items) ? localResp.items : [];
+        state.feed.items = Array.isArray(localResp?.items) ? localResp.items : [];
         state.feed.cachedCursor = typeof localResp?.cachedCursor === 'string' ? localResp.cachedCursor : '';
         state.feed.hasMore = Boolean(state.feed.cachedCursor);
+        state.feed.source = localResp?.source || 'pds';
       } catch (err) {
         if (isAbortError(err)) return;
-        errors.push(err?.message || String(err));
-        localItems = [];
+        pdsError = err?.message || String(err);
+        state.feed.items = [];
+        state.feed.cachedCursor = '';
+        state.feed.hasMore = false;
+        state.feed.source = 'pds';
       }
-
-      // If the browser has an OAuth session, use it for the authenticated timeline.
-      if (atprotoSession) {
-        try {
-          const tokenSet = await atprotoSession.getTokenSet('auto');
-          const base = normalizeBaseUrl(tokenSet?.aud);
-          if (!base) throw new Error('ATProto session is missing audience/PDS URL.');
-
-          const json = await atpFetchJson(`${base}/xrpc/app.bsky.feed.getTimeline?limit=${limit}`, { signal });
-          const feed = Array.isArray(json?.feed) ? json.feed : [];
-
-          remoteItems = feed
-            .map((entry) => normalizeAtprotoPostFromTimeline(entry?.post))
-            .filter((p) => p && typeof p === 'object' && p.uri);
-        } catch (err) {
-          if (isAbortError(err)) return;
-          errors.push(err?.message || String(err));
-          remoteItems = [];
-        }
-      }
-
-      const merged = mergeAndSortItems(remoteItems, localItems);
-
-      if (!merged.length) {
-        throw new Error(errors[0] || 'No items returned.');
-      }
-
-      const sourceParts = [];
-      if (remoteItems.length) sourceParts.push('atproto');
-      if (localItems.length) sourceParts.push('local');
-      state.feed.source = sourceParts.length ? sourceParts.join('+') : localSource || 'unknown';
-      state.feed.items = merged;
+    } else {
+      state.feed.items = [];
+      state.feed.cachedCursor = '';
+      state.feed.hasMore = false;
+      state.feed.source = 'pds';
       state.feed.loading = false;
       state.feed.error = null;
-    } catch (err) {
-      state.feed.loading = false;
-      state.feed.error = err?.message || String(err);
     }
 
-    paint();
+    if (wantsJetstream && atprotoSession) {
+      try {
+        const tokenSet = await atprotoSession.getTokenSet('auto');
+        const base = normalizeBaseUrl(tokenSet?.aud);
+        if (!base) throw new Error('ATProto session is missing audience/PDS URL.');
+
+        const json = await atpFetchJson(`${base}/xrpc/app.bsky.feed.getTimeline?limit=${limit}`, { signal });
+        const feed = Array.isArray(json?.feed) ? json.feed : [];
+
+        state.jetstream.items = feed
+          .map((entry) => normalizeAtprotoPostFromTimeline(entry?.post))
+          .filter((p) => p && typeof p === 'object' && p.uri);
+        state.jetstream.source = base || 'jetstream';
+      } catch (err) {
+        if (isAbortError(err)) return;
+        jetError = err?.message || String(err);
+        state.jetstream.items = [];
+        state.jetstream.source = 'jetstream';
+      }
+    } else if (wantsJetstream) {
+      // Jetstream embed uses websocket + does not require ATProto OAuth.
+      if (!isEmbedJetstream()) {
+        jetError = 'Connect Bluesky/ATProto to view Jetstream.';
+        state.jetstream.items = [];
+        state.jetstream.source = 'jetstream';
+      }
+    } else {
+      state.jetstream.items = [];
+      state.jetstream.source = '';
+      state.jetstream.loading = false;
+      state.jetstream.error = null;
+    }
+
+    if (wantsFirehose) {
+      // Firehose is websocket-only.
+      state.firehose.items = [];
+      state.firehose.source = firehoseUrl || 'wss://bsky.network/xrpc/com.atproto.sync.subscribeRepos';
+    } else {
+      state.firehose.items = [];
+      state.firehose.source = '';
+      state.firehose.loading = false;
+      state.firehose.error = null;
+    }
+
+    if (wantsPds) {
+      state.feed.loading = false;
+      state.feed.error = pdsError;
+    }
+    state.jetstream.loading = false;
+    state.jetstream.error = jetError;
+
+    if (wantsFirehose) {
+      state.firehose.loading = false;
+      state.firehose.error = fireError;
+    }
+
+    // Websocket streams: start/stop based on what this view needs.
+    if (wantsJetstream && isEmbedJetstream()) {
+      startJetstream();
+    } else {
+      stopJetstream();
+    }
+
+    if (wantsFirehose) {
+      startFirehose();
+    } else {
+      stopFirehose();
+    }
+
+    // Preserve scroll anchoring while updating the PDS column.
+    if (wantsPds) {
+      setFeedItems(state.feed.items, { preserveScroll: true });
+    }
+
+    if (wantsJetstream && isEmbedJetstream()) {
+      paint();
+    }
+
+    if (wantsFirehose) {
+      paint();
+    }
   }
 
   // Back-compat helper (some handlers call loadFeed()).
@@ -1556,6 +2578,7 @@ function renderApp(session, atproto) {
 
   paint();
   bindDelegatedHandlers();
+  loadBuildStamp();
   window.addEventListener('hashchange', () => {
     loadForCurrentRoute();
   });

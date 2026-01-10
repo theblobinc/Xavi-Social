@@ -1,0 +1,14 @@
+{
+  "name": "column_panels",
+  "version": "1.0.0",
+  "displayName": "Column Panels",
+  "description": "350px column-based panel scaffold (drag, resize, swap).",
+  "dependencies": [
+    "utils"
+  ],
+  "scripts": [
+    "column-panels.js"
+  ],
+  "components": [],
+  "exports": {}
+}

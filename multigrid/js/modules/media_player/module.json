@@ -1,18 +1,14 @@
 {
   "name": "media_player",
   "version": "1.0.0",
-  "displayName": "Media Player",
-  "description": "Audio and video playback with playlist management",
+  "displayName": "Media Viewer",
+  "description": "Unified media viewer panel (iframe, video, audio, images)",
   "dependencies": ["utils"],
   "scripts": [
-    "music-player.js",
-    "video-player.js",
-    "music-player-panel.js"
+    "media-viewer-panel.js"
   ],
   "components": [
-    "music-player",
-    "video-player",
-    "music-player-panel"
+    "media-viewer-panel"
   ],
   "exports": {}
 }

@@ -1,0 +1,12 @@
+{
+  "name": "workspace_settings",
+  "version": "1.0.0",
+  "displayName": "Workspace Settings",
+  "description": "Tabbed workspace settings panel (streams + multigrid options).",
+  "dependencies": ["utils", "column_panels"],
+  "scripts": [
+    "workspace-settings-panel.js"
+  ],
+  "components": [],
+  "exports": {}
+}

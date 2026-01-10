@@ -18,6 +18,10 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Language server / lint caches
+.clj-kondo/
+.lsp/
+
 # Node build artifacts
 /frontend/node_modules/
 /frontend/dist/

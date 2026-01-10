@@ -20,7 +20,7 @@ final class Controller extends Package
 {
     protected $pkgHandle = 'xavi_social';
     protected $appVersionRequired = '9.0.0';
-    protected $pkgVersion = '0.1.7';
+    protected $pkgVersion = '0.1.8';
 
     /**
      * Concrete v9+ default package autoloading expects classes under src/Concrete/...

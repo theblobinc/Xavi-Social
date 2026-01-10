@@ -157,6 +157,27 @@ This TODO is designed to be *shippable*. It keeps the original scope, but turns 
 
 ---
 
+## P0-6: Social feed display correctness
+
+**Why:** Feed rendering still feels brittle (overflows, missing empty/error/loaded states) and is a visible blocker.
+
+**Where**
+- `frontend/src/main.js` (render + routing)
+- `frontend/src/app.css` (layout + responsive rules)
+- `multigrid/js/modules/social/social-overlay.js` (panel embed sizing)
+
+**Plan**
+- [ ] Add explicit loading, empty, and error states (no blank screens)
+- [ ] Ensure avatars/text wrap cleanly at ~360px widths; avoid horizontal scroll
+- [ ] Normalize post body rendering (whitespace, links, media placeholders)
+- [ ] Add lightweight skeletons for initial load and load-more
+- [ ] Keep scroll position stable when new items prepend/refresh
+
+**Done when**
+- Feed always shows a graceful state and posts never overflow on small screens.
+
+---
+
 # P1 NEXT — core UX + correctness
 
 ## P1-1: Make session/auth URLs popup-aware
@@ -226,6 +247,44 @@ This TODO is designed to be *shippable*. It keeps the original scope, but turns 
 
 **Done when**
 - Users can connect/disconnect without confusing states.
+
+---
+
+## P1-6: Settings overlay polish + persistence
+
+**Where**
+- `multigrid/js/modules/taskbar/taskbar.js`
+- Settings overlay UI (tab rendering, form elements)
+
+**Plan**
+- [ ] Persist active tab, overlay width, and open/closed state (`localStorage` keys `xavi.settings.*`)
+- [ ] Guard against missing `localStorage` (fallback to defaults without crashing)
+- [ ] Add validation and inline error hints for settings saves
+- [ ] Ensure theme selector matches actual applied theme on load
+
+**Done when**
+- Reloading preserves settings state, and toggles apply without visual glitches or errors.
+
+---
+
+## P1-7: Documentation + automation hygiene
+
+**Why:** The package relies on AI-dump runs, commit cadence, and living docs; keep these enforced.
+
+**Where**
+- `AI-INSTRUCTIONS.md`
+- `README.md`
+- `AI-Tests.md`
+- `scripts/*` (ensure instructions map stays current)
+
+**Plan**
+- [ ] Add/maintain a “workflow” block in README covering: ai-dump before hand-off, build, test, commit, push.
+- [ ] Keep AI-INSTRUCTIONS file map in sync whenever scripts/markdown files change.
+- [ ] Add a short “commit cadence” note (e.g., per feature/change-set) and reference in release checklist.
+- [ ] Ensure AI-Tests mentions MCP smoke commands once added.
+
+**Done when**
+- README + AI-INSTRUCTIONS describe the required hygiene steps, and release checklist references commit/test expectations.
 
 ---
 
@@ -365,6 +424,11 @@ Below is the “everything list”, rewritten so each item is actionable. If it�
   - Overlay width/state: persist keys `xavi.settings.overlayWidth`, `xavi.settings.overlayState`.
   - Done when: reload preserves user settings.
 
+- [ ] **State resilience**
+  - Gracefully handle missing `localStorage` or quota errors; fall back to defaults.
+  - Validate inputs (theme, overlay width) before save; show inline errors.
+  - Done when: settings UI cannot crash due to storage issues.
+
 - [ ] **Real settings**
   - Theme (P0), Feed algorithm (P1/P2), Notifications toggle (P3).
   - Done when: each setting has storage + UI + applied behavior.
@@ -377,6 +441,11 @@ Below is the “everything list”, rewritten so each item is actionable. If it�
   - Implement a stable list component (dedupe + keys).
   - Add “loading / empty / error” states.
   - Done when: feed never appears blank without an explanation.
+
+- [ ] **Small-screen layout**
+  - Ensure avatars/text wrap and buttons do not overflow at ~360px widths.
+  - Keep scroll position stable on prepend/refresh.
+  - Done when: no horizontal scrollbars on mobile widths.
 
 - [ ] **Sorting / filtering**
   - Reverse-chronological baseline.
@@ -501,11 +570,22 @@ Below is the “everything list”, rewritten so each item is actionable. If it�
   - E2E (Playwright) for login + callback + posting
   - Done when: CI can catch the most common breakages.
 
+- [ ] **MCP API smoke tests**
+  - Add lightweight MCP scripts that call `/social/api/session`, `/social/api/jwt`, `/social/api/me`, `/social/api/debug` using minted JWT and cookie flow.
+  - Integrate with `scripts/test-api.sh` or a new `scripts/test-mcp.sh`.
+  - Done when: one command verifies auth + basic read endpoints via MCP tooling.
+
 - [ ] **Docs**
   - “How to run locally”
   - “How auth works (popup mode)”
   - “How to add a new endpoint/route”
-  - Done when: new dev can contribute in <1 day.
+  - Keep README and AI-INSTRUCTIONS in sync with scripts/config changes.
+  - Done when: new dev can contribute in <1 day and docs mention all required scripts.
+
+- [ ] **Hygiene workflow in docs**
+  - Document required steps per change: run AI-DUMP.sh, build frontend, run smoke tests, commit + push with summary.
+  - Add to README release/checklist section and AI-INSTRUCTIONS.
+  - Done when: docs explicitly tell contributors the expected per-change loop.
 
 ---
 
@@ -587,6 +667,11 @@ CREATE TABLE xavi_social_user_prefs (
   - posting works (if logged in)
   - logout works
 - [ ] Tag release + short changelog entry
+
+- [ ] AI hygiene:
+  - Run `AI-DUMP.sh` (or light) and attach in notes when handing off.
+  - Confirm README / AI-INSTRUCTIONS reflect any new scripts or endpoints.
+  - Commit and push with a concise summary of changes + tests run.
 
 ---
 

@@ -6,39 +6,26 @@
 startMenu:
   sections:
 
-    - id: music
-      label: Music
+    - id: social
+      label: Social
       items:
-        - id: playlistViewer
-          icon: "📋"
-          label: "Playlist Viewer"
-          action: launchPanel:playlist-viewer
+        - id: socialPds
+          icon: "🧾"
+          label: "PDS Feed"
+          action: launchPanel:social-pds
+        - id: socialJetstream
+          icon: "🛰️"
+          label: "Jetstream"
+          action: launchPanel:social-jetstream
+        - id: socialFirehose
+          icon: "🔥"
+          label: "Firehose"
+          action: launchPanel:social-firehose
 
-    - id: musicVisualizer
-      label: Music Visualizer
+    - id: media
+      label: Media
       items:
-        - id: visualizerToggle
-          icon: "🎵"
-          labelWhenDisabled: "Enable"
-          labelWhenEnabled: "Disable"
-          action: toggleMusicVisualizer
-        - id: visualizerSettings
-          icon: "⚙️"
-          label: "Settings"
-          action: openMusicVisualizerSettings
-        - id: visualizerPresets
-          icon: "✨"
-          label: "Presets"
-          items:
-            - id: presetBars
-              icon: "▮"
-              label: "Bars"
-              action: setMusicVisualizerPreset:bars
-            - id: presetDots
-              icon: "•"
-              label: "Dots"
-              action: setMusicVisualizerPreset:dots
-            - id: presetWave
-              icon: "〰"
-              label: "Wave"
-              action: setMusicVisualizerPreset:wave
+        - id: mediaViewer
+          icon: "📺"
+          label: "Media Viewer"
+          action: launchPanel:media-viewer

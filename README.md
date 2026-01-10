@@ -6,10 +6,6 @@ ConcreteCMS package for the Xavi Social features. This repo contains the package
 - API base: https://www.princegeorge.app/social/api
 - API docs: see API.md in this folder.
 
-- Public SPA entry: https://www.princegeorge.app/social
-- API base: https://www.princegeorge.app/social/api
-- API docs: see API.md in this folder.
-
 ## Frontend (Vite SPA)
 
 The frontend lives in `frontend/`.
@@ -28,6 +24,15 @@ If you prefer running Node locally:
 - `npm install`
 - `npm run dev` (dev server)
 - `npm run build` (outputs the production build)
+
+## Workflow (per change)
+
+1) Run an AI dump before hand-off: `./public/packages/xavi_social/AI-DUMP.sh` (or `ai-dump-light.sh`).
+2) Build SPA assets when touching frontend: `./public/packages/xavi_social/scripts/build-frontend.sh`.
+3) Smoke test APIs (cookie or JWT): `./public/packages/xavi_social/scripts/test-api.sh $JWT https://www.princegeorge.app`.
+4) MCP smoke (auto-mint JWT if secret present): `./public/packages/xavi_social/scripts/test-mcp.sh https://www.princegeorge.app`.
+5) Update docs you touched (README, TODO, AI-INSTRUCTIONS, AI-Tests, API.md).
+6) Commit and push with a concise summary + tests run.
 
 ## Dev datastore (Docker)
 

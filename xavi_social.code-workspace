@@ -1,17 +1,24 @@
 {
 	"folders": [
 		{
-			"path": "../../../packages/xavi_social"
+			"path": "."
 		},
 		{
 			"path": "../../.."
 		},
 		{
 			"path": "../../../.."
-		},
-		{
-			"path": "../../../../../xavi.app/docker/compose/appview-feed"
 		}
 	],
-	"settings": {}
+	"settings": {},
+	"launch": {
+		"configurations": [
+			{
+				"type": "chrome",
+				"name": "https://www.princegeorge.app/social",
+				"request": "launch",
+				"url": "https://www.princegeorge.app/social"
+			}
+		]
+	}
 }

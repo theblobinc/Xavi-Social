@@ -8,6 +8,90 @@ class XaviMultiGridWorkspace extends HTMLElement {
         this.floatingLayer = null;
         this.boundModuleRegister = (event) => this.onModuleRegister(event);
         this.workspaceReadyEvent = null;
+        this._tabPanelGuardObserver = null;
+    }
+
+    shouldInstallTabPanelGuard() {
+        try {
+            const params = new URLSearchParams(window.location.search || '');
+            const flag = String(params.get('debugTabPanel') || params.get('tabPanelGuard') || '').trim().toLowerCase();
+            if (flag === '1' || flag === 'true' || flag === 'yes' || flag === 'on') {
+                return true;
+            }
+        } catch (e) {
+            // ignore
+        }
+
+        try {
+            const stored = String(window.localStorage?.getItem?.('xavi.debug.tabPanelGuard') || '').trim().toLowerCase();
+            return stored === '1' || stored === 'true' || stored === 'yes' || stored === 'on';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    installTabPanelGuard() {
+        if (!this.contentArea || typeof MutationObserver === 'undefined') {
+            return;
+        }
+        if (!this.shouldInstallTabPanelGuard()) {
+            return;
+        }
+        if (this._tabPanelGuardObserver) {
+            return;
+        }
+
+        const report = (panelEl) => {
+            try {
+                const stack = new Error('[xavi_social] Unexpected .tab-panel detected').stack;
+                console.error('[Workspace] Unexpected .tab-panel detected (should never render):', panelEl, stack);
+            } catch (e) {
+                console.error('[Workspace] Unexpected .tab-panel detected (should never render):', panelEl);
+            }
+
+            // Optional hard-guard: remove it immediately so it can’t regress the UX.
+            try {
+                panelEl?.remove?.();
+            } catch (e) {
+                // ignore
+            }
+        };
+
+        // Initial scan.
+        try {
+            const existing = this.contentArea.querySelectorAll('.tab-panel');
+            existing.forEach((el) => report(el));
+        } catch (e) {
+            // ignore
+        }
+
+        this._tabPanelGuardObserver = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                const nodes = mutation.addedNodes || [];
+                for (const node of nodes) {
+                    if (!node || node.nodeType !== 1) continue;
+                    const el = node;
+                    try {
+                        if (el.classList?.contains?.('tab-panel')) {
+                            report(el);
+                        }
+                        const nested = el.querySelectorAll?.('.tab-panel');
+                        if (nested && nested.length) {
+                            nested.forEach((p) => report(p));
+                        }
+                    } catch (e) {
+                        // ignore
+                    }
+                }
+            }
+        });
+
+        try {
+            this._tabPanelGuardObserver.observe(this.contentArea, { childList: true, subtree: true });
+            console.warn('[Workspace] Tab-panel guard enabled (debug): will log/remove any .tab-panel injections.');
+        } catch (e) {
+            // ignore
+        }
     }
 
     async loadModules() {
@@ -142,6 +226,9 @@ class XaviMultiGridWorkspace extends HTMLElement {
         this.bgLayer = this.shadowRoot.querySelector('.xavi-bg-layer');
         this.gridElement = this.shadowRoot.getElementById('workspace-grid');
         this.floatingLayer = this.shadowRoot.getElementById('floating-panel-layer');
+
+        // Debug-only runtime guard: catch any legacy .tab-panel injections.
+        this.installTabPanelGuard();
         
         // Grid configuration
         this.cellSize = 30;
@@ -199,6 +286,8 @@ class XaviMultiGridWorkspace extends HTMLElement {
                 background-color: black;
                 overflow: hidden;
                 box-sizing: border-box;
+                --xavi-col-w: 350px;
+                border-top: 2px solid rgba(255, 255, 255, 0.9);
             }
 
             .xavi-multi-grid {
@@ -243,10 +332,15 @@ class XaviMultiGridWorkspace extends HTMLElement {
                 z-index: 10;
                 pointer-events: none;
                 background-color: transparent;
-                background-image:
-                    linear-gradient(to right, rgba(70, 70, 70, 0.4) 1px, transparent 1px),
-                    linear-gradient(to bottom, rgba(70, 70, 70, 0.4) 1px, transparent 1px);
-                background-size: var(--tab-grid-step) var(--tab-grid-step);
+                /* Column guides (no legacy 30px grid): vertical lines every 350px. */
+                background-image: repeating-linear-gradient(
+                    to right,
+                    transparent 0,
+                    transparent calc(var(--xavi-col-w) - 1px),
+                    rgba(255, 255, 255, 0.22) calc(var(--xavi-col-w) - 1px),
+                    rgba(255, 255, 255, 0.22) var(--xavi-col-w)
+                );
+                background-size: auto;
                 background-position: 0 0;
                 background-repeat: repeat;
             }
@@ -259,6 +353,7 @@ class XaviMultiGridWorkspace extends HTMLElement {
                 bottom: var(--xavi-taskbar-h, 108px);
                 pointer-events: none;
                 z-index: 2000;
+                overflow: hidden;
             }
 
             .floating-panel-layer > * {
@@ -319,7 +414,7 @@ class XaviMultiGridWorkspace extends HTMLElement {
             .panel-body {
                 flex: 1 1 auto;
                 min-height: 0;
-                overflow: hidden;
+                overflow: auto;
             }
 
             /* Floating overlays are attached into #floating-panel-layer by their modules. */
@@ -355,6 +450,14 @@ class XaviMultiGridWorkspace extends HTMLElement {
 
     disconnectedCallback() {
         this.removeEventListener('register-workspace-module', this.boundModuleRegister);
+        if (this._tabPanelGuardObserver) {
+            try {
+                this._tabPanelGuardObserver.disconnect();
+            } catch (e) {
+                // ignore
+            }
+            this._tabPanelGuardObserver = null;
+        }
         if (this.resizeObserver) {
             this.resizeObserver.disconnect();
         }

@@ -2,13 +2,14 @@
   "name": "social",
   "version": "1.0.0",
   "displayName": "Social",
-  "description": "Main social overlay panel for the grid.",
+  "description": "Panels-only social timeline (no overlays).",
   "dependencies": [
     "utils",
-    "tab_overlay"
+    "column_panels"
   ],
   "scripts": [
-    "social-overlay.js"
+    "timeline-panel.js",
+    "streams-panels.js"
   ],
   "components": [],
   "exports": {}

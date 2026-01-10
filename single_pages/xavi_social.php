@@ -50,15 +50,6 @@ $multiGridBaseUrl = $baseUrl . '/packages/xavi_social/multigrid';
 <?php if ($enableSPA) : ?>
 	<div class="xavi-grid-shell">
 		<div id="xavi-grid-container" class="xavi-grid-container">
-			<music-player style="display:none;"></music-player>
-			<div id="xavi-settings-overlay" class="settings-overlay" data-floating-layer="true" data-mode="settings">
-				<div class="settings-overlay-content"></div>
-				<div class="settings-resize-handle" aria-hidden="true"></div>
-			</div>
-			<button id="xavi-settings-toggle-tab" class="settings-toggle-tab" title="Settings">
-				<span class="arrow">▶</span>
-			</button>
-			<video-player></video-player>
 		</div>
 	</div>
 
@@ -111,61 +102,25 @@ $multiGridBaseUrl = $baseUrl . '/packages/xavi_social/multigrid';
 			height: 100%;
 		}
 
-		music-player,
-		video-player {
-			display: block;
-		}
-
-		music-player {
-			display: none !important;
-			position: relative;
-			z-index: 1150;
-		}
 	</style>
-
-	<script>
-		// Suppress noisy YouTube-related warnings that can clutter the console.
-		(function () {
-			if (typeof console === 'undefined' || typeof console.warn !== 'function') {
-				return;
-			}
-			const originalWarn = console.warn.bind(console);
-			const patterns = [
-				/youtube\.com/i,
-				/ytimg\.com/i,
-				/\bYT\b/i,
-				/youtube/i,
-			];
-			console.warn = function (...args) {
-				try {
-					const msg = args
-						.map(a => (typeof a === 'string' ? a : ''))
-						.join(' ');
-					if (patterns.some((re) => re.test(msg))) {
-						return;
-					}
-				} catch (e) {
-					// Fall through.
-				}
-				return originalWarn(...args);
-			};
-		})();
-	</script>
-
-	<!-- Load External Libraries (YouTube / Fuse.js) -->
-	<script src="https://www.youtube.com/iframe_api"></script>
-	<script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
 
 	<script>
 		window.XAVI_MODULE_CONFIGS = <?php
 			$modulesDir = $multiGridDir . '/js/modules';
 			$moduleConfigs = [];
 			$moduleAssetVersionMax = 0;
+			$disabledModules = [
+				// Hard-disable overlay UI in multigrid: panels-only.
+				'tab_overlay',
+			];
 			if (is_dir($modulesDir)) {
 				$moduleDirs = array_filter(scandir($modulesDir), function ($item) use ($modulesDir) {
 					return $item !== '.' && $item !== '..' && is_dir($modulesDir . '/' . $item);
 				});
 				foreach ($moduleDirs as $moduleDir) {
+					if (in_array($moduleDir, $disabledModules, true)) {
+						continue;
+					}
 					$configFile = $modulesDir . '/' . $moduleDir . '/module.json';
 					if (file_exists($configFile)) {
 						$config = json_decode((string) file_get_contents($configFile), true);
@@ -222,6 +177,10 @@ $multiGridBaseUrl = $baseUrl . '/packages/xavi_social/multigrid';
 			(int) (@filemtime($multiGridDir . '/js/workspace.js') ?: 0),
 			(int) (@filemtime($multiGridDir . '/js/main.js') ?: 0),
 			(int) ($moduleAssetVersionMax ?: 0),
+			(int) (@filemtime($packageDir . '/dist/app.js') ?: 0),
+			(int) (@filemtime($packageDir . '/dist/app.css') ?: 0),
+			(int) (@filemtime($packageDir . '/dist/index.html') ?: 0),
+			(int) (@filemtime($packageDir . '/dist/build.json') ?: 0),
 			(int) (@filemtime(__FILE__) ?: 0)
 		);
 	?>
