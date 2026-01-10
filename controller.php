@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Concrete\Package\XaviSocial;
 
+use Concrete\Core\Entity\Package as PackageEntity;
 use Concrete\Core\Page\Single as SinglePage;
 use Concrete\Core\Package\Package;
 use Concrete\Core\Support\Facade\Events;
@@ -95,7 +96,7 @@ final class Controller extends Package
         Events::addListener('on_user_register', $listener);
     }
 
-    private function installOrUpdateSinglePages(Package $pkg): void
+    private function installOrUpdateSinglePages(Package|PackageEntity $pkg): void
     {
         $paths = [
             '/xavi_social',
