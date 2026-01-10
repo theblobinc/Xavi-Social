@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "displayName": "Grid Taskbar",
   "description": "Panel grid system with drag-drop and resize functionality",
-  "dependencies": ["utils", "playlist_overlay", "media_search"],
+  "dependencies": ["utils", "tab_overlay", "media_search"],
   "scripts": [
     "taskbar.js"
   ],

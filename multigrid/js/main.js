@@ -54,8 +54,8 @@ window.releaseMusicPlaybackOwnership = () => {
 };
 // ---- END multi-tab playback lock ----
 
-// Playlist overlay module now handles all playlist viewer initialization
-console.log('[Main] Playlist initialization delegated to playlist_overlay module');
+// Tab overlay module now handles all overlay initialization
+console.log('[Main] Overlay initialization delegated to tab_overlay module');
 
 // Initialize workspace
 document.addEventListener('DOMContentLoaded', () => {

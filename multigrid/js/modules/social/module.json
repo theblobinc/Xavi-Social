@@ -4,13 +4,12 @@
   "displayName": "Social",
   "description": "Main social overlay panel for the grid.",
   "dependencies": [
-    "utils"
+    "utils",
+    "tab_overlay"
   ],
   "scripts": [
     "social-overlay.js"
   ],
-  "components": [
-    "xavi-social-overlay"
-  ],
+  "components": [],
   "exports": {}
 }

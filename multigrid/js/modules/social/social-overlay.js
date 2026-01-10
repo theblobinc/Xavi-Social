@@ -19,30 +19,18 @@
         priority: 999,
         requiresAdmin: false,
         maxInstances: 1,
-        launch: (context = {}) => spawnSocialOverlay(context),
+        launch: (context = {}) => openSocialTab(context, { openOverlay: true }),
         taskviewConfig: {
             // Ensure taskview focus/close works for this panel.
             focus: (ctx) => {
                 try {
-                    const el = findExistingOverlay();
-                    if (el && typeof el.bringToFront === 'function') {
-                        el.bringToFront();
-                    }
+                    openSocialTab(ctx, { openOverlay: true });
                 } catch (e) {
                     // ignore
                 }
             },
             close: () => {
-                const el = findExistingOverlay();
-                if (el && typeof el.closePanel === 'function') {
-                    el.closePanel();
-                    return true;
-                }
-                if (el && el.parentNode) {
-                    el.parentNode.removeChild(el);
-                    return true;
-                }
-                return false;
+                return closeSocialTab();
             }
         }
     };
@@ -56,7 +44,7 @@
                 return;
             }
             window.__xaviSocialOverlayAutoLaunched = true;
-            spawnSocialOverlay({ workspace: event?.detail?.workspace });
+            openSocialTab({ workspace: event?.detail?.workspace }, { openOverlay: true });
         } catch (e) {
             // ignore
         }
@@ -73,11 +61,73 @@
                 return;
             }
             window.__xaviSocialOverlayAutoLaunched = true;
-            spawnSocialOverlay({ workspace: ws });
+            openSocialTab({ workspace: ws }, { openOverlay: true });
         } catch (e) {
             // ignore
         }
     }, { once: true });
+
+    function getTaskbar(workspace) {
+        const ws = workspace || document.querySelector('xavi-multi-grid');
+        try {
+            return ws?.shadowRoot?.querySelector?.('panel-taskbar') || ws?.querySelector?.('panel-taskbar') || null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function openSocialTab(context = {}, options = {}) {
+        const { openOverlay = true } = options || {};
+
+        // Preferred: drive everything through the tab overlay inside the grid.
+        if (typeof window.openTabOverlayTab === 'function' && openOverlay) {
+            window.openTabOverlayTab('social');
+            return true;
+        }
+
+        if (typeof window.selectTabOverlayTab === 'function') {
+            window.selectTabOverlayTab('social');
+            if (openOverlay) {
+                const taskbar = getTaskbar(context?.workspace);
+                if (taskbar && typeof taskbar.openPlaylistOverlay === 'function') {
+                    taskbar.openPlaylistOverlay();
+                }
+            }
+            return true;
+        }
+
+        // Fallback (should not happen once tab_overlay is loaded): legacy body overlay.
+        spawnSocialOverlay(context);
+        return true;
+    }
+
+    function closeSocialTab(context = {}) {
+        try {
+            if (typeof window.selectTabOverlayTab === 'function') {
+                window.selectTabOverlayTab('playlist');
+            }
+
+            const taskbar = getTaskbar(context?.workspace);
+            if (taskbar && typeof taskbar.closePlaylistOverlay === 'function') {
+                taskbar.closePlaylistOverlay({ retainTaskview: false, persistState: false });
+                return true;
+            }
+        } catch (e) {
+            // ignore
+        }
+
+        // Fallback: close legacy overlay if present.
+        const el = findExistingOverlay();
+        if (el && typeof el.closePanel === 'function') {
+            el.closePanel();
+            return true;
+        }
+        if (el && el.parentNode) {
+            el.parentNode.removeChild(el);
+            return true;
+        }
+        return false;
+    }
 
     if (!customElements.get('xavi-social-overlay')) {
         class XaviSocialOverlay extends HTMLElement {

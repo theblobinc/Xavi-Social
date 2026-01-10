@@ -1,12 +1,13 @@
 {
-  "name": "playlist_overlay",
+  "name": "tab_overlay",
   "version": "1.0.0",
-  "displayName": "Playlist Overlay Controller",
-  "description": "Moves the playlist overlay into the floating layer and applies workspace-scoped styling.",
+  "displayName": "Tab Overlay",
+  "description": "Hosts the slide-out overlay inside the workspace floating layer and provides a tabbed container for views (playlist, social, etc).",
   "dependencies": [
     "utils"
   ],
   "scripts": [
+    "tab-overlay-tabs.js",
     "playlist-viewer-template.js",
     "playlist-viewer.js",
     "playlist-overlay.js",
