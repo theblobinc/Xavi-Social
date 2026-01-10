@@ -136,6 +136,13 @@ function renderApp(session, atproto) {
       const uri = decodeRoutePart(rest.join('/'));
       return { name: 'thread', uri };
     }
+    if (name === 'media') {
+      return { name: 'media' };
+    }
+    if (name === 'search') {
+      const query = decodeRoutePart(rest.join('/'));
+      return { name: 'search', query };
+    }
     return { name: 'feed' };
   }
 
@@ -145,6 +152,11 @@ function renderApp(session, atproto) {
     if (r.name === 'notifications') hash = '#notifications';
     if (r.name === 'profile') hash = `#profile/${encodeRoutePart(r.actor || getDefaultActor())}`;
     if (r.name === 'thread') hash = `#thread/${encodeRoutePart(r.uri || '')}`;
+    if (r.name === 'media') hash = '#media';
+    if (r.name === 'search') {
+      const q = String(r.query || '').trim();
+      hash = q ? `#search/${encodeRoutePart(q)}` : '#search';
+    }
 
     if (replace) {
       window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}${hash}`);
@@ -258,6 +270,8 @@ function renderApp(session, atproto) {
           ${tab('feed', 'Timeline', '#feed')}
           ${tab('notifications', 'Notifications', '#notifications')}
           ${tab('profile', 'Profile', `#profile/${encodeRoutePart(getDefaultActor())}`)}
+          ${tab('media', 'Media', '#media')}
+          ${tab('search', 'Search', '#search')}
         </div>
         <div class="text-muted small" style="white-space: nowrap;">
           ${loggedIn ? 'Signed in' : 'Read-only'}
@@ -371,6 +385,68 @@ function renderApp(session, atproto) {
         `;
       })
       .join('');
+  }
+
+  function normalizeText(value) {
+    return String(value || '').toLowerCase();
+  }
+
+  function renderSearchBody(query) {
+    const q = String(query || '').trim();
+    if (!q) {
+      return `<div class="panel panel-default"><div class="panel-body text-muted">Type a search term in the tab overlay search box.</div></div>`;
+    }
+
+    const haystack = Array.isArray(state.feed.items) ? state.feed.items : [];
+    const qn = normalizeText(q);
+    const matches = haystack.filter((item) => {
+      const text = normalizeText(item?.text);
+      const handle = normalizeText(item?.author?.handle);
+      const name = normalizeText(item?.author?.displayName);
+      return text.includes(qn) || handle.includes(qn) || name.includes(qn);
+    });
+
+    if (matches.length === 0) {
+      return `<div class="panel panel-default"><div class="panel-body text-muted">No matches for <strong>${escapeHtml(q)}</strong>.</div></div>`;
+    }
+
+    // Reuse feed rendering, but temporarily swap items.
+    const prevItems = state.feed.items;
+    state.feed.items = matches;
+    const html = renderFeedBody();
+    state.feed.items = prevItems;
+    return html;
+  }
+
+  function hasMedia(item) {
+    const embed = item?.embed || item?.media || null;
+    if (!embed) return false;
+    if (Array.isArray(embed?.images) && embed.images.length) return true;
+    if (typeof embed === 'string' && embed) return true;
+    if (typeof embed?.uri === 'string' && embed.uri) return true;
+    return false;
+  }
+
+  function renderMediaBody() {
+    if (state.feed.loading) {
+      return `<div class="panel panel-default"><div class="panel-body text-muted">Loading…</div></div>`;
+    }
+    if (state.feed.error) {
+      return `<div class="panel panel-default"><div class="panel-body">${escapeHtml(String(state.feed.error))}</div></div>`;
+    }
+
+    const items = Array.isArray(state.feed.items) ? state.feed.items : [];
+    const mediaItems = items.filter((it) => hasMedia(it));
+    if (mediaItems.length === 0) {
+      return `<div class="panel panel-default"><div class="panel-body text-muted">No media found in the current timeline yet.</div></div>`;
+    }
+
+    // For now, show the posts that contain media (post-level thumbnails can be added later when embed shapes are stable).
+    const prevItems = state.feed.items;
+    state.feed.items = mediaItems;
+    const html = renderFeedBody();
+    state.feed.items = prevItems;
+    return html;
   }
 
   function renderNotificationsBody() {
@@ -597,6 +673,12 @@ function renderApp(session, atproto) {
     } else if (route.name === 'profile') {
       centerTitle = 'Profile';
       centerBody = renderProfileBody();
+    } else if (route.name === 'media') {
+      centerTitle = 'Media';
+      centerBody = renderMediaBody();
+    } else if (route.name === 'search') {
+      centerTitle = 'Search';
+      centerBody = renderSearchBody(route.query);
     }
 
     root.innerHTML = `
@@ -765,6 +847,11 @@ function renderApp(session, atproto) {
     paint();
   }
 
+  // Back-compat helper (some handlers call loadFeed()).
+  async function loadFeed() {
+    return await loadTimeline();
+  }
+
   async function loadThread(uri) {
     state.thread.loading = true;
     state.thread.error = null;
@@ -852,6 +939,11 @@ function renderApp(session, atproto) {
     }
     if (route.name === 'profile') {
       await loadProfile(route.actor);
+      return;
+    }
+
+    if (route.name === 'media' || route.name === 'search') {
+      await loadTimeline();
       return;
     }
 

@@ -186,6 +186,7 @@
                     gap: 6px;
                     padding: 10px 10px 0;
                     flex: 0 0 auto;
+                    align-items: center;
                 }
 
                 #floating-panel-layer .playlist-overlay.tab-overlay .tab-overlay-tab {
@@ -205,6 +206,25 @@
                     border-color: rgba(74, 158, 255, 0.7);
                     background: rgba(74, 158, 255, 0.18);
                     color: rgba(255, 255, 255, 0.95);
+                }
+
+                #floating-panel-layer .playlist-overlay.tab-overlay .tab-overlay-search {
+                    margin-left: auto;
+                    width: min(260px, 40vw);
+                    appearance: none;
+                    border: 1px solid rgba(255, 255, 255, 0.14);
+                    background: rgba(255, 255, 255, 0.04);
+                    color: rgba(255, 255, 255, 0.92);
+                    border-radius: 999px;
+                    padding: 6px 10px;
+                    font-size: 12px;
+                    font-weight: 600;
+                    outline: none;
+                }
+
+                #floating-panel-layer .playlist-overlay.tab-overlay .tab-overlay-search::placeholder {
+                    color: rgba(255, 255, 255, 0.55);
+                    font-weight: 600;
                 }
 
                 #floating-panel-layer .playlist-overlay.tab-overlay .tab-overlay-body {
@@ -263,6 +283,15 @@
         header.appendChild(searchTab);
         header.appendChild(playlistTab);
 
+        const searchInput = document.createElement('input');
+        searchInput.className = 'tab-overlay-search';
+        searchInput.type = 'search';
+        searchInput.placeholder = 'Search…';
+        searchInput.setAttribute('aria-label', 'Search background feed');
+        searchInput.autocomplete = 'off';
+        searchInput.spellcheck = false;
+        header.appendChild(searchInput);
+
         const body = document.createElement('div');
         body.className = 'tab-overlay-body';
 
@@ -294,6 +323,21 @@
             const tabId = String(btn.dataset.tab || '').trim();
             if (!tabId) return;
             selectTab(tabId, { openOverlay: tabId === TAB_PLAYLIST });
+        });
+
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const q = String(searchInput.value || '').trim();
+                window.__xaviSocialSearchQuery = q;
+                selectTab(TAB_SEARCH, { openOverlay: false });
+                return;
+            }
+            if (e.key === 'Escape') {
+                searchInput.value = '';
+                window.__xaviSocialSearchQuery = '';
+                return;
+            }
         });
 
         syncTabUI(overlay);
@@ -370,17 +414,31 @@
             return true;
         }
 
-        // Placeholder backgrounds (until implemented)
         if (normalized === TAB_MEDIA) {
-            root.style.display = 'none';
-            placeholder.textContent = 'Media (coming soon)';
-            placeholder.style.display = 'flex';
+            placeholder.style.display = 'none';
+            root.style.display = 'block';
+
+            window.__xaviSocialMountRoot = root;
+            ensureSocialAssetsLoaded();
+
+            if (!window.location.hash.startsWith('#media')) {
+                window.location.hash = '#media';
+            }
             return true;
         }
+
         if (normalized === TAB_SEARCH) {
-            root.style.display = 'none';
-            placeholder.textContent = 'Search (coming soon)';
-            placeholder.style.display = 'flex';
+            placeholder.style.display = 'none';
+            root.style.display = 'block';
+
+            window.__xaviSocialMountRoot = root;
+            ensureSocialAssetsLoaded();
+
+            const q = String(window.__xaviSocialSearchQuery || '').trim();
+            const target = q ? `#search/${encodeURIComponent(q)}` : '#search';
+            if (window.location.hash !== target) {
+                window.location.hash = target;
+            }
             return true;
         }
 
