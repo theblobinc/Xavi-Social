@@ -5,7 +5,8 @@
         return;
     }
 
-    const OVERLAY_ID = 'playlist-viewer-overlay';
+    const OVERLAY_ID = 'xavi-settings-overlay';
+    const LEGACY_OVERLAY_ID = 'playlist-viewer-overlay';
     const CSS_ID = 'xavi-tab-overlay-styles';
     const SOCIAL_APP_CSS_ID = 'xavi-social-app-css';
     const SOCIAL_APP_JS_ID = 'xavi-social-app-js';
@@ -194,7 +195,12 @@
 
         for (const root of roots) {
             try {
-                const el = root?.getElementById?.(OVERLAY_ID) || root?.querySelector?.(`#${OVERLAY_ID}`);
+                const el = (
+                    root?.getElementById?.(OVERLAY_ID)
+                    || root?.querySelector?.(`#${OVERLAY_ID}`)
+                    || root?.getElementById?.(LEGACY_OVERLAY_ID)
+                    || root?.querySelector?.(`#${LEGACY_OVERLAY_ID}`)
+                );
                 if (el) {
                     return el;
                 }
@@ -284,6 +290,12 @@
 
     function ensureOverlayTabbed(overlay) {
         if (!overlay || overlay.dataset.tabbed === 'true') {
+            return;
+        }
+
+        // Repurposed overlay: Settings-only, no tab header injection.
+        if (overlay.dataset && overlay.dataset.mode === 'settings') {
+            overlay.dataset.tabbed = 'true';
             return;
         }
 

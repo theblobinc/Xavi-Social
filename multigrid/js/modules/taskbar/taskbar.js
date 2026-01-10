@@ -1,5 +1,19 @@
-const PLAYLIST_OVERLAY_ID = 'playlist-viewer-overlay';
-const PLAYLIST_TOGGLE_ID = 'playlist-toggle-tab';
+const SETTINGS_OVERLAY_ID = 'xavi-settings-overlay';
+const SETTINGS_TOGGLE_ID = 'xavi-settings-toggle-tab';
+
+// Backward-compatibility fallbacks (legacy playlist naming).
+const LEGACY_PLAYLIST_OVERLAY_ID = 'playlist-viewer-overlay';
+const LEGACY_PLAYLIST_TOGGLE_ID = 'playlist-toggle-tab';
+
+const SETTINGS_STORAGE = {
+    overlayWidth: 'xavi.settings.overlayWidth',
+    overlayState: 'xavi.settings.overlayState',
+};
+
+const LEGACY_STORAGE = {
+    overlayWidth: 'pgmusic.playlistOverlayWidth',
+    overlayState: 'pgmusic.playlistOverlay',
+};
 
 function resolveVideoPlayerElement() {
     return document.querySelector('video-player')
@@ -218,16 +232,40 @@ class Taskbar extends HTMLElement {
     }
 
     loadOverlayWidth() {
-        const stored = Number(localStorage.getItem('pgmusic.playlistOverlayWidth'));
+        const readKey = (key) => {
+            try {
+                return localStorage.getItem(key);
+            } catch (e) {
+                return null;
+            }
+        };
+
+        const stored = Number(readKey(SETTINGS_STORAGE.overlayWidth));
         if (Number.isFinite(stored) && stored > 0) {
             return stored;
         }
+
+        const legacy = Number(readKey(LEGACY_STORAGE.overlayWidth));
+        if (Number.isFinite(legacy) && legacy > 0) {
+            // Migrate forward.
+            try {
+                localStorage.setItem(SETTINGS_STORAGE.overlayWidth, String(Math.round(legacy)));
+            } catch (e) {
+                // ignore
+            }
+            return legacy;
+        }
+
         return null;
     }
 
     persistOverlayWidth() {
         if (!Number.isFinite(this.overlayWidth)) return;
-        localStorage.setItem('pgmusic.playlistOverlayWidth', String(Math.round(this.overlayWidth)));
+        try {
+            localStorage.setItem(SETTINGS_STORAGE.overlayWidth, String(Math.round(this.overlayWidth)));
+        } catch (e) {
+            // ignore
+        }
     }
 
     getOverlayWidthBounds(containerRect = null) {
@@ -276,7 +314,7 @@ class Taskbar extends HTMLElement {
             : bounds.defaultWidth;
         const target = Math.min(Math.max(requested, bounds.min), bounds.max);
         this.overlayWidth = target;
-        overlay.style.setProperty('--playlist-overlay-width', `${Math.round(target)}px`);
+        overlay.style.setProperty('--xavi-settings-overlay-width', `${Math.round(target)}px`);
         this.alignPlaylistToggle();
     }
 
@@ -285,10 +323,10 @@ class Taskbar extends HTMLElement {
         if (!overlayData) return;
         const overlay = overlayData.overlay;
         if (!overlay) return;
-        let handle = overlay.querySelector('.playlist-resize-handle');
+        let handle = overlay.querySelector('.settings-resize-handle');
         if (!handle) {
             handle = document.createElement('div');
-            handle.className = 'playlist-resize-handle';
+            handle.className = 'settings-resize-handle';
             handle.setAttribute('aria-hidden', 'true');
             overlay.appendChild(handle);
         }
@@ -331,7 +369,7 @@ class Taskbar extends HTMLElement {
         let nextWidth = this.overlayResizeState.startWidth + (event.clientX - this.overlayResizeState.startX);
         nextWidth = Math.min(Math.max(nextWidth, bounds.min), bounds.max);
         this.overlayWidth = nextWidth;
-        overlay.style.setProperty('--playlist-overlay-width', `${Math.round(nextWidth)}px`);
+        overlay.style.setProperty('--xavi-settings-overlay-width', `${Math.round(nextWidth)}px`);
     }
 
     onOverlayResizeEnd(event) {
@@ -408,6 +446,8 @@ class Taskbar extends HTMLElement {
         window.addEventListener('floating-panel-focus', this.boundFloatingPanelFocus);
         window.addEventListener('panel-closed', this.boundFloatingPanelClosed);
         window.addEventListener('bus-routes-taskview-state', this.boundBusTaskviewState);
+        // Settings overlay attach event (keep legacy playlist event for backward-compat).
+        window.addEventListener('settings-overlay-attached', this.boundPlaylistOverlayAttached);
         window.addEventListener('playlist-overlay-attached', this.boundPlaylistOverlayAttached);
         console.log('[TASKBAR INIT] connectedCallback started at', Date.now());
         
@@ -1212,19 +1252,19 @@ class Taskbar extends HTMLElement {
     }
 
     resolvePlaylistOverlayNodes() {
-        let overlay = document.getElementById(PLAYLIST_OVERLAY_ID);
+        let overlay = document.getElementById(SETTINGS_OVERLAY_ID) || document.getElementById(LEGACY_PLAYLIST_OVERLAY_ID);
         const workspace = this.workspace || document.querySelector('xavi-multi-grid');
         if (!overlay && workspace?.shadowRoot) {
-            overlay = workspace.shadowRoot.getElementById(PLAYLIST_OVERLAY_ID);
+            overlay = workspace.shadowRoot.getElementById(SETTINGS_OVERLAY_ID) || workspace.shadowRoot.getElementById(LEGACY_PLAYLIST_OVERLAY_ID);
         }
 
-        let toggleTab = document.getElementById(PLAYLIST_TOGGLE_ID);
+        let toggleTab = document.getElementById(SETTINGS_TOGGLE_ID) || document.getElementById(LEGACY_PLAYLIST_TOGGLE_ID);
         if ((!toggleTab || (overlay && !overlay.contains(toggleTab))) && overlay) {
-            toggleTab = overlay.querySelector(`#${PLAYLIST_TOGGLE_ID}, .playlist-toggle-tab`);
+            toggleTab = overlay.querySelector(`#${SETTINGS_TOGGLE_ID}, .settings-toggle-tab, #${LEGACY_PLAYLIST_TOGGLE_ID}, .playlist-toggle-tab`);
         }
 
         if (!overlay || !toggleTab) {
-            const cached = window.__playlistOverlayRefs;
+            const cached = window.__settingsOverlayRefs || window.__playlistOverlayRefs;
             if (!overlay && cached?.overlay) {
                 overlay = cached.overlay;
             }
@@ -1238,7 +1278,7 @@ class Taskbar extends HTMLElement {
 
     handlePlaylistOverlayAttached(event) {
         const overlay = event?.detail?.overlay || null;
-        const toggleTab = event?.detail?.toggleTab || overlay?.querySelector(`#${PLAYLIST_TOGGLE_ID}, .playlist-toggle-tab`);
+        const toggleTab = event?.detail?.toggleTab || overlay?.querySelector(`#${SETTINGS_TOGGLE_ID}, .settings-toggle-tab, #${LEGACY_PLAYLIST_TOGGLE_ID}, .playlist-toggle-tab`);
         if (!overlay) {
             return;
         }
@@ -1258,6 +1298,21 @@ class Taskbar extends HTMLElement {
             this.openPlaylistOverlay();
         }
         overlay.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+        if (overlay.dataset.mode === 'settings') {
+            const activeTab =
+                overlay.querySelector('.xavi-settings__tab[aria-selected="true"]') ||
+                overlay.querySelector('.xavi-settings__tab');
+            if (activeTab && typeof activeTab.focus === 'function') {
+                activeTab.focus();
+                return;
+            }
+            const fallback = overlay.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+            if (fallback && typeof fallback.focus === 'function') {
+                fallback.focus();
+            }
+            return;
+        }
+
         const viewer = overlay.querySelector('playlist-viewer');
         if (viewer && typeof viewer.focus === 'function') {
             viewer.focus();
@@ -1265,7 +1320,7 @@ class Taskbar extends HTMLElement {
     }
 
     registerPlaylistTaskviewEntry(setActive = true) {
-        // Intentionally disabled: the playlist viewer should not show up in the unified
+        // Intentionally disabled: the Settings overlay should not show up in the unified
         // task strip / open applications area. It is controlled via the taskbar corner toggle.
         const state = this.specialComponents['playlist-viewer'];
         if (state) state.isMinimized = false;
@@ -1302,7 +1357,7 @@ class Taskbar extends HTMLElement {
             target = clampWidth(Math.round(containerWidth));
         }
         this.overlayWidth = target;
-        overlay.style.setProperty('--playlist-overlay-width', `${Math.round(target)}px`);
+        overlay.style.setProperty('--xavi-settings-overlay-width', `${Math.round(target)}px`);
         this.alignPlaylistToggle();
         this.persistOverlayWidth();
         this.updatePlaylistOverlayGeometry();
@@ -1333,11 +1388,39 @@ class Taskbar extends HTMLElement {
             this.overlayWidth = targetWidth;
             const overlay = state.overlay;
             if (overlay) {
-                overlay.style.setProperty('--playlist-overlay-width', `${Math.round(targetWidth)}px`);
+                overlay.style.setProperty('--xavi-settings-overlay-width', `${Math.round(targetWidth)}px`);
             }
             this.persistOverlayWidth();
         }
         state.isMinimized = false;
+    }
+
+    normalizeSettingsOverlay(overlay) {
+        if (!overlay || overlay.dataset?.mode !== 'settings') {
+            return;
+        }
+
+        // If the legacy tab-overlay module already injected a header/body, remove it.
+        overlay.classList.remove('tab-overlay');
+
+        const header = overlay.querySelector('.tab-overlay-header');
+        if (header) {
+            header.remove();
+        }
+
+        const body = overlay.querySelector('.tab-overlay-body');
+        if (body) {
+            const content = body.querySelector('.settings-overlay-content');
+            const resizeHandle = overlay.querySelector('.settings-resize-handle');
+            if (content && content.parentElement === body) {
+                if (resizeHandle) {
+                    overlay.insertBefore(content, resizeHandle);
+                } else {
+                    overlay.appendChild(content);
+                }
+            }
+            body.remove();
+        }
     }
 
     setupPlaylistOverlay() {
@@ -1345,16 +1428,18 @@ class Taskbar extends HTMLElement {
             let { overlay, toggleTab } = this.resolvePlaylistOverlayNodes();
 
             if (!overlay || !toggleTab) {
-                console.warn('Playlist overlay nodes missing from DOM. Creating fallback overlay.');
+                console.warn('Settings overlay nodes missing from DOM. Creating fallback overlay.');
                 const created = this.createPlaylistOverlayElements();
                 overlay = created.overlay;
                 toggleTab = created.toggleTab;
             }
 
             if (!overlay || !toggleTab) {
-                console.error('Failed to initialize playlist overlay elements.');
+                console.error('Failed to initialize settings overlay elements.');
                 return;
             }
+
+            this.normalizeSettingsOverlay(overlay);
 
             this.specialComponents['playlist-viewer'].overlay = overlay;
             this.specialComponents['playlist-viewer'].toggleTab = toggleTab;
@@ -1364,13 +1449,21 @@ class Taskbar extends HTMLElement {
 
             if (!toggleTab.dataset.bound) {
                 toggleTab.addEventListener('click', () => {
-                    console.log('Playlist toggle tab clicked');
+                    console.log('Settings toggle tab clicked');
                     this.togglePlaylistOverlay();
                 });
                 toggleTab.dataset.bound = 'true';
             }
 
-            const savedState = localStorage.getItem('pgmusic.playlistOverlay');
+            const safeGet = (key) => {
+                try {
+                    return localStorage.getItem(key);
+                } catch (e) {
+                    return null;
+                }
+            };
+
+            const savedState = safeGet(SETTINGS_STORAGE.overlayState) || safeGet(LEGACY_STORAGE.overlayState);
             if (savedState === 'closed') {
                 this.closePlaylistOverlay();
             } else {
@@ -1378,7 +1471,7 @@ class Taskbar extends HTMLElement {
             }
 
             this.updatePlaylistOverlayUI();
-            console.log('Playlist overlay setup complete.');
+            console.log('Settings overlay setup complete.');
         };
 
         if (document.readyState === 'loading') {
@@ -1390,14 +1483,14 @@ class Taskbar extends HTMLElement {
 
     createPlaylistOverlayElements() {
         const overlay = document.createElement('div');
-        overlay.id = PLAYLIST_OVERLAY_ID;
-        overlay.className = 'playlist-overlay';
+        overlay.id = SETTINGS_OVERLAY_ID;
+        overlay.className = 'settings-overlay';
 
         // Repurposed: this slide-out overlay is Settings-only.
         overlay.dataset.mode = 'settings';
 
         const content = document.createElement('div');
-        content.className = 'playlist-overlay-content';
+        content.className = 'settings-overlay-content';
 
         // Settings UI (no playlist DOM / no #playlist-scroll / no #playlist-tabs)
         const settingsRoot = document.createElement('div');
@@ -1484,13 +1577,13 @@ class Taskbar extends HTMLElement {
         selectTab(initial);
         overlay.appendChild(content);
         const resizeHandle = document.createElement('div');
-        resizeHandle.className = 'playlist-resize-handle';
+        resizeHandle.className = 'settings-resize-handle';
         resizeHandle.setAttribute('aria-hidden', 'true');
         overlay.appendChild(resizeHandle);
 
         const toggleTab = document.createElement('button');
-        toggleTab.id = PLAYLIST_TOGGLE_ID;
-        toggleTab.className = 'playlist-toggle-tab';
+        toggleTab.id = SETTINGS_TOGGLE_ID;
+        toggleTab.className = 'settings-toggle-tab';
         toggleTab.title = 'Toggle Settings';
         const arrow = document.createElement('span');
         arrow.className = 'arrow';
@@ -1645,7 +1738,7 @@ class Taskbar extends HTMLElement {
         }
 
         const roundedHeight = Math.round(overlayHeight);
-        overlay.style.setProperty('--playlist-overlay-height', `${roundedHeight}px`);
+        overlay.style.setProperty('--xavi-settings-overlay-height', `${roundedHeight}px`);
         
         // Only set background height if playlist overlay is actually open
         if (this.specialComponents?.['playlist-viewer']?.isOpen) {
@@ -1692,7 +1785,11 @@ class Taskbar extends HTMLElement {
 
         state.isOpen = true;
         state.isMinimized = false;
-        localStorage.setItem('pgmusic.playlistOverlay', 'open');
+        try {
+            localStorage.setItem(SETTINGS_STORAGE.overlayState, 'open');
+        } catch (e) {
+            // ignore
+        }
         
         const arrow = state.toggleTab?.querySelector('.arrow');
         if (arrow) arrow.textContent = '◀';
@@ -1732,7 +1829,11 @@ class Taskbar extends HTMLElement {
         state.isOpen = false;
         state.isMinimized = retainTaskview;
         if (persistState) {
-            localStorage.setItem('pgmusic.playlistOverlay', 'closed');
+            try {
+                localStorage.setItem(SETTINGS_STORAGE.overlayState, 'closed');
+            } catch (e) {
+                // ignore
+            }
         }
 
         const arrow = state.toggleTab?.querySelector('.arrow');
@@ -4554,14 +4655,14 @@ class Taskbar extends HTMLElement {
             labelSpan.textContent = label;
             button.appendChild(labelSpan);
 
-            // Special handling for playlist-viewer
+            // Special handling for the Settings overlay (tabId remains 'playlist-viewer')
             if (tabId === 'playlist-viewer') {
-                // No buttons for playlist viewer - it's an overlay
+                // No panel buttons for Settings - it's an overlay
                 if (this.specialComponents['playlist-viewer'].isOpen) {
                     button.classList.add('active');
                 }
                 button.addEventListener('click', () => {
-                    console.log('Playlist viewer button clicked in taskbar');
+                    console.log('Settings overlay button clicked in taskbar');
                     this.setupPlaylistOverlay();
                     this.togglePlaylistOverlay();
                 });

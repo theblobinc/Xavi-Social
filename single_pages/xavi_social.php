@@ -51,13 +51,11 @@ $multiGridBaseUrl = $baseUrl . '/packages/xavi_social/multigrid';
 	<div class="xavi-grid-shell">
 		<div id="xavi-grid-container" class="xavi-grid-container">
 			<music-player style="display:none;"></music-player>
-			<div id="playlist-viewer-overlay" class="playlist-overlay" data-floating-layer="true">
-				<div class="playlist-overlay-content">
-					<playlist-viewer></playlist-viewer>
-				</div>
-				<div class="playlist-resize-handle" aria-hidden="true"></div>
+			<div id="xavi-settings-overlay" class="settings-overlay" data-floating-layer="true" data-mode="settings">
+				<div class="settings-overlay-content"></div>
+				<div class="settings-resize-handle" aria-hidden="true"></div>
 			</div>
-			<button id="playlist-toggle-tab" class="playlist-toggle-tab" title="Toggle Playlist Viewer">
+			<button id="xavi-settings-toggle-tab" class="settings-toggle-tab" title="Settings">
 				<span class="arrow">▶</span>
 			</button>
 			<video-player></video-player>

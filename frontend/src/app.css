@@ -23,16 +23,15 @@
 }
 
 .xv-shell .panel {
-  background: transparent;
+  background: #000;
   color: inherit;
   border-color: rgba(255, 255, 255, 0.18);
-  background: #000;
+}
 
 .xv-shell .panel-heading {
   background: transparent;
   color: inherit;
-  color: inherit;
-  text-decoration-color: currentColor;
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 .xv-shell .panel-body {
@@ -89,11 +88,7 @@
 .xv-header {
   display: flex;
   align-items: baseline;
-    position: relative;
-    overflow: visible;
   gap: 12px;
-    background: #000;
-    color: #fff;
 }
 
 .xv-post .panel-body {

@@ -8,28 +8,39 @@
     }
 
     function initializeOverlay() {
-    const OVERLAY_ID = 'playlist-viewer-overlay';
-    const TOGGLE_ID = 'playlist-toggle-tab';
-    const FLOATING_STYLE_ID = 'playlist-overlay-floating-styles';
-    const ATTACH_EVENT = 'playlist-overlay-attached';
+    const OVERLAY_ID = 'xavi-settings-overlay';
+    const TOGGLE_ID = 'xavi-settings-toggle-tab';
+    const LEGACY_OVERLAY_ID = 'playlist-viewer-overlay';
+    const LEGACY_TOGGLE_ID = 'playlist-toggle-tab';
+    const FLOATING_STYLE_ID = 'xavi-settings-overlay-floating-styles';
+    const ATTACH_EVENT = 'settings-overlay-attached';
+    const LEGACY_ATTACH_EVENT = 'playlist-overlay-attached';
     const MAX_ATTACH_ATTEMPTS = 40;
 
     const FLOATING_LAYER_STYLES = `
+#floating-panel-layer .settings-overlay,
 #floating-panel-layer .playlist-overlay {
     position: absolute;
-    top: var(--playlist-overlay-top, 0px);
-    left: var(--playlist-overlay-left, 0px);
+    top: var(--xavi-settings-overlay-top, var(--playlist-overlay-top, 0px));
+    left: var(--xavi-settings-overlay-left, var(--playlist-overlay-left, 0px));
     right: auto;
-    bottom: var(--playlist-overlay-bottom, 0px);
-    max-height: calc(100% - var(--playlist-overlay-top, 0px) - var(--playlist-overlay-bottom, 0px));
-    --playlist-overlay-margin: 0px;
-    --playlist-default-width: 33.33vw;
-    width: min(var(--playlist-overlay-width, var(--playlist-default-width)), calc(100% - var(--playlist-overlay-margin, 0px) - 16px));
-    min-width: min(360px, calc(100% - var(--playlist-overlay-margin, 0px) - 16px));
-    max-width: calc(100% - var(--playlist-overlay-margin, 0px) - 16px);
+    bottom: var(--xavi-settings-overlay-bottom, var(--playlist-overlay-bottom, 0px));
+    max-height: calc(
+        100%
+        - var(--xavi-settings-overlay-top, var(--playlist-overlay-top, 0px))
+        - var(--xavi-settings-overlay-bottom, var(--playlist-overlay-bottom, 0px))
+    );
+    --xavi-settings-overlay-margin: var(--playlist-overlay-margin, 0px);
+    --xavi-settings-default-width: var(--playlist-default-width, 33.33vw);
+    width: min(
+        var(--xavi-settings-overlay-width, var(--playlist-overlay-width, var(--xavi-settings-default-width))),
+        calc(100% - var(--xavi-settings-overlay-margin, 0px) - 16px)
+    );
+    min-width: min(360px, calc(100% - var(--xavi-settings-overlay-margin, 0px) - 16px));
+    max-width: calc(100% - var(--xavi-settings-overlay-margin, 0px) - 16px);
     background: rgba(12, 12, 12, 0.98);
     border-right: 2px solid rgba(255, 255, 255, 0.2);
-    z-index: var(--z-playlist-overlay, 2500);
+    z-index: var(--z-settings-overlay, var(--z-playlist-overlay, 2500));
     box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5);
     display: flex;
     flex-direction: column;
@@ -40,19 +51,23 @@
     transition: transform 0.35s ease;
 }
 
+#floating-panel-layer .settings-overlay.open,
 #floating-panel-layer .playlist-overlay.open {
     transform: translateX(0);
 }
 
+#floating-panel-layer .settings-overlay:not(.open),
 #floating-panel-layer .playlist-overlay:not(.open) {
     transform: translateX(-100%);
 }
 
+#floating-panel-layer .settings-overlay.resizing,
 #floating-panel-layer .playlist-overlay.resizing {
     cursor: ew-resize;
     user-select: none;
 }
 
+#floating-panel-layer .settings-overlay .settings-overlay-content,
 #floating-panel-layer .playlist-overlay .playlist-overlay-content {
     flex: 1;
     min-height: 0;
@@ -68,6 +83,83 @@
     min-height: 0;
 }
 
+/* Settings UI (repurposed slide-out overlay) */
+#floating-panel-layer .settings-overlay .xavi-settings,
+#floating-panel-layer .playlist-overlay .xavi-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    color: rgba(255, 255, 255, 0.92);
+}
+
+#floating-panel-layer .settings-overlay .xavi-settings a,
+#floating-panel-layer .settings-overlay .xavi-settings a:visited,
+#floating-panel-layer .settings-overlay .xavi-settings a:hover,
+#floating-panel-layer .settings-overlay .xavi-settings a:active,
+#floating-panel-layer .playlist-overlay .xavi-settings a,
+#floating-panel-layer .playlist-overlay .xavi-settings a:visited,
+#floating-panel-layer .playlist-overlay .xavi-settings a:hover,
+#floating-panel-layer .playlist-overlay .xavi-settings a:active {
+    color: inherit;
+}
+
+#floating-panel-layer .settings-overlay .xavi-settings__header,
+#floating-panel-layer .playlist-overlay .xavi-settings__header {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+#floating-panel-layer .settings-overlay .xavi-settings__tab,
+#floating-panel-layer .playlist-overlay .xavi-settings__tab {
+    appearance: none;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+    color: inherit;
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+}
+
+#floating-panel-layer .settings-overlay .xavi-settings__tab.is-active,
+#floating-panel-layer .playlist-overlay .xavi-settings__tab.is-active {
+    background: rgba(255, 255, 255, 0.10);
+    border-color: rgba(255, 255, 255, 0.22);
+}
+
+#floating-panel-layer .settings-overlay .xavi-settings__body,
+#floating-panel-layer .playlist-overlay .xavi-settings__body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+}
+
+#floating-panel-layer .settings-overlay .xavi-settings__section-title,
+#floating-panel-layer .playlist-overlay .xavi-settings__section-title {
+    font-weight: 800;
+    margin-bottom: 10px;
+}
+
+#floating-panel-layer .settings-overlay .xavi-settings__hint,
+#floating-panel-layer .playlist-overlay .xavi-settings__hint {
+    color: rgba(255, 255, 255, 0.70);
+    font-size: 12px;
+}
+
+#floating-panel-layer .settings-overlay .xavi-settings__row,
+#floating-panel-layer .playlist-overlay .xavi-settings__row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin: 10px 0;
+    user-select: none;
+}
+
+#floating-panel-layer .settings-overlay .settings-resize-handle,
 #floating-panel-layer .playlist-overlay .playlist-resize-handle {
     position: absolute;
     top: 0;
@@ -82,6 +174,7 @@
     transition: opacity 0.2s ease;
 }
 
+#floating-panel-layer .settings-overlay .settings-resize-handle::before,
 #floating-panel-layer .playlist-overlay .playlist-resize-handle::before {
     content: '';
     display: block;
@@ -92,6 +185,7 @@
     box-shadow: 0 0 6px rgba(0, 0, 0, 0.4);
 }
 
+#floating-panel-layer .settings-overlay .settings-toggle-tab,
 #floating-panel-layer .playlist-overlay .playlist-toggle-tab {
     position: absolute;
     right: -40px;
@@ -114,57 +208,68 @@
     pointer-events: auto;
 }
 
+#floating-panel-layer .settings-overlay .settings-toggle-tab:hover,
 #floating-panel-layer .playlist-overlay .playlist-toggle-tab:hover {
-    background: rgba(74, 158, 255, 0.3);
+    background: rgba(255, 255, 255, 0.06);
     color: #fff;
 }
 
+#floating-panel-layer .settings-overlay .settings-toggle-tab .arrow,
 #floating-panel-layer .playlist-overlay .playlist-toggle-tab .arrow {
     display: inline-block;
     transition: transform 0.3s ease;
 }
 
+#floating-panel-layer .settings-overlay:not(.open) .settings-overlay-content,
+#floating-panel-layer .settings-overlay:not(.open) .settings-resize-handle,
 #floating-panel-layer .playlist-overlay:not(.open) .playlist-overlay-content,
 #floating-panel-layer .playlist-overlay:not(.open) .playlist-resize-handle {
     opacity: 0;
     pointer-events: none;
 }
 
+#floating-panel-layer .settings-overlay.open .settings-overlay-content,
+#floating-panel-layer .settings-overlay.open .settings-resize-handle,
 #floating-panel-layer .playlist-overlay.open .playlist-overlay-content,
 #floating-panel-layer .playlist-overlay.open .playlist-resize-handle {
     opacity: 1;
 }
 
 @media (max-width: 900px) {
+    #floating-panel-layer .settings-overlay,
     #floating-panel-layer .playlist-overlay {
-        --playlist-overlay-margin: 28px;
-        --playlist-default-width: calc(100% - 28px);
-        max-width: calc(100% - var(--playlist-overlay-margin, 28px));
+        --xavi-settings-overlay-margin: 28px;
+        --xavi-settings-default-width: calc(100% - 28px);
+        max-width: calc(100% - var(--xavi-settings-overlay-margin, 28px));
     }
 }
 
 @media (max-width: 640px) {
+    #floating-panel-layer .settings-overlay,
     #floating-panel-layer .playlist-overlay {
-        --playlist-overlay-margin: 16px;
-        width: calc(100% - var(--playlist-overlay-margin, 16px));
-        min-width: calc(100% - var(--playlist-overlay-margin, 16px));
-        max-width: calc(100% - var(--playlist-overlay-margin, 16px));
+        --xavi-settings-overlay-margin: 16px;
+        width: calc(100% - var(--xavi-settings-overlay-margin, 16px));
+        min-width: calc(100% - var(--xavi-settings-overlay-margin, 16px));
+        max-width: calc(100% - var(--xavi-settings-overlay-margin, 16px));
     }
 
     /* On mobile, the external toggle tab can land off-screen when the overlay is near full width.
        Use the taskbar corner toggle instead. */
+    #floating-panel-layer .settings-overlay .settings-toggle-tab,
     #floating-panel-layer .playlist-overlay .playlist-toggle-tab {
         display: none;
     }
 }
 
 @media (max-width: 480px) {
+    #floating-panel-layer .settings-overlay,
     #floating-panel-layer .playlist-overlay {
-        --playlist-overlay-margin: 12px;
-        width: calc(100% - var(--playlist-overlay-margin, 12px));
+        --xavi-settings-overlay-margin: 12px;
+        width: calc(100% - var(--xavi-settings-overlay-margin, 12px));
         border-right-width: 1px;
     }
 
+    #floating-panel-layer .settings-overlay .settings-toggle-tab,
     #floating-panel-layer .playlist-overlay .playlist-toggle-tab {
         width: 32px;
         height: 80px;
@@ -194,9 +299,12 @@
         if (!overlay) {
             return null;
         }
-        let toggle = overlay.querySelector(`#${TOGGLE_ID}`) || overlay.querySelector('.playlist-toggle-tab');
+        let toggle = overlay.querySelector(`#${TOGGLE_ID}`) || overlay.querySelector('.settings-toggle-tab');
         if (!toggle) {
             toggle = document.getElementById(TOGGLE_ID);
+        }
+        if (!toggle) {
+            toggle = overlay.querySelector(`#${LEGACY_TOGGLE_ID}`) || overlay.querySelector('.playlist-toggle-tab') || document.getElementById(LEGACY_TOGGLE_ID);
         }
         if (toggle && toggle.parentElement !== overlay) {
             overlay.appendChild(toggle);
@@ -208,8 +316,11 @@
         if (!detail || !detail.overlay) {
             return;
         }
+        window.__settingsOverlayRefs = detail;
         window.__playlistOverlayRefs = detail;
         window.dispatchEvent(new CustomEvent(ATTACH_EVENT, { detail }));
+        // Legacy event name, kept for compatibility.
+        window.dispatchEvent(new CustomEvent(LEGACY_ATTACH_EVENT, { detail }));
     }
 
     function attachOverlayToFloatingLayer() {
@@ -218,9 +329,17 @@
             return false;
         }
 
-        let overlay = workspace.shadowRoot?.getElementById(OVERLAY_ID) || document.getElementById(OVERLAY_ID);
+        let overlay = workspace.shadowRoot?.getElementById(OVERLAY_ID)
+            || document.getElementById(OVERLAY_ID)
+            || workspace.shadowRoot?.getElementById(LEGACY_OVERLAY_ID)
+            || document.getElementById(LEGACY_OVERLAY_ID);
         if (!overlay) {
             return false;
+        }
+
+        // Ensure new naming/classes are present for styling.
+        if (!overlay.classList.contains('settings-overlay') && !overlay.classList.contains('playlist-overlay')) {
+            overlay.classList.add('settings-overlay');
         }
 
         ensureStyles(workspace);
