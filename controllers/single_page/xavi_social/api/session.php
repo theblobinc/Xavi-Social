@@ -15,12 +15,16 @@ class Session extends PageController
     {
         $user = $this->app->make(User::class);
 
+        $popup = $this->isPopupRequest();
+        $loginUrl = $popup ? (string) Url::to('/social/auth/login') . '?popup=1' : (string) Url::to('/social/auth/login');
+        $logoutUrl = $popup ? (string) Url::to('/social/auth/logout') . '?popup=1' : (string) Url::to('/social/auth/logout');
+
         $payload = [
             'loggedIn' => $user->isRegistered(),
             'userId' => $user->isRegistered() ? (int) $user->getUserID() : null,
             'userName' => $user->isRegistered() ? (string) $user->getUserName() : null,
-            'loginUrl' => (string) Url::to('/social/auth/login'),
-            'logoutUrl' => (string) Url::to('/social/auth/logout'),
+            'loginUrl' => $loginUrl,
+            'logoutUrl' => $logoutUrl,
         ];
 
         $response = new JsonResponse($payload);
@@ -30,5 +34,17 @@ class Session extends PageController
 
         $response->send();
         exit;
+    }
+
+    private function isPopupRequest(): bool
+    {
+        $value = $this->request->query->get('popup');
+        if ($value === null) {
+            return false;
+        }
+
+        $normalized = strtolower((string) $value);
+
+        return $normalized === '1' || $normalized === 'true' || $normalized === 'yes' || $normalized === 'on';
     }
 }

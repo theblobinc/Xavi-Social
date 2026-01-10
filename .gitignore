@@ -23,8 +23,17 @@ pnpm-debug.log*
 /frontend/dist/
 /frontend/.vite/
 
+# Root-level installs (not tracked)
+/node_modules/
+/vendor/
+
 # Vite build output (if generated in package root)
 /dist/
 
 # Sensitive local-only materials (never commit)
 /sample-code/
+/_private/
+
+# Jetstream runtime deps (not tracked)
+/jetstream/node_modules/
+/jetstream/.package-lock.json

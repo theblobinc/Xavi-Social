@@ -1508,6 +1508,24 @@ class Taskbar extends HTMLElement {
                 </div>
                 <div class="xavi-settings__panel" data-panel="social" role="tabpanel">
                     <div class="xavi-settings__section-title">Social</div>
+                    <div class="xavi-settings__row" role="group" aria-label="Theme">
+                        <div class="xavi-settings__label">Theme</div>
+                        <div class="xavi-settings__choices">
+                            <label class="xavi-settings__choice">
+                                <input type="radio" name="xavi-theme" value="system" class="xavi-settings__radio" />
+                                <span>System</span>
+                            </label>
+                            <label class="xavi-settings__choice">
+                                <input type="radio" name="xavi-theme" value="dark" class="xavi-settings__radio" />
+                                <span>Dark</span>
+                            </label>
+                            <label class="xavi-settings__choice">
+                                <input type="radio" name="xavi-theme" value="light" class="xavi-settings__radio" />
+                                <span>Light</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="xavi-settings__hint">Choose how the Social panel adapts to its host site.</div>
                     <label class="xavi-settings__row">
                         <input type="checkbox" class="xavi-settings__checkbox" data-setting="xaviSocial.profileSettingsInSettings" />
                         <span>Profile settings live in Settings panel</span>
@@ -1565,6 +1583,41 @@ class Taskbar extends HTMLElement {
                 } catch (e) {
                     // ignore
                 }
+            });
+        });
+
+        const themeRadios = Array.from(settingsRoot.querySelectorAll('input[name="xavi-theme"]'));
+        const validThemes = ['system', 'dark', 'light'];
+        const readThemePref = () => {
+            try {
+                const stored = (localStorage.getItem('xavi.theme') || '').toLowerCase();
+                if (validThemes.includes(stored)) {
+                    return stored;
+                }
+            } catch (e) {
+                // ignore
+            }
+            return 'system';
+        };
+        const syncThemeRadios = (value) => {
+            const target = validThemes.includes(value) ? value : 'system';
+            themeRadios.forEach((radio) => {
+                radio.checked = String(radio.value || '').toLowerCase() === target;
+            });
+        };
+        syncThemeRadios(readThemePref());
+
+        themeRadios.forEach((radio) => {
+            radio.addEventListener('change', () => {
+                const raw = (radio.value || '').toLowerCase();
+                const next = validThemes.includes(raw) ? raw : 'system';
+                try {
+                    localStorage.setItem('xavi.theme', next);
+                } catch (e) {
+                    // ignore
+                }
+                syncThemeRadios(next);
+                window.dispatchEvent(new CustomEvent('xavi:theme-change', { detail: { theme: next } }));
             });
         });
 

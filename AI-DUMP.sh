@@ -95,7 +95,7 @@ collect_files_tree() {
   local root="$1"
 
   local py
-  py=$'import os\nimport sys\n\nEXCLUDE_DIRS = {"dist", "_private", ".git"}\n\nCODE_EXTS = {\n    ".php", ".py", ".js", ".ts", ".jsx", ".tsx",\n    ".css", ".less", ".scss", ".sass",\n    ".html", ".htm",\n    ".json", ".yml", ".yaml",\n    ".xml", ".toml", ".ini",\n    ".sh",\n}\n\nIMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico"}\n\nraw = sys.stdin.buffer.read().split(b"\\0")\nout = []\n\nfor p in raw:\n    if not p:\n        continue\n    s = p.decode("utf-8", errors="replace")\n    s = s[2:] if s.startswith("./") else s\n    if not s:\n        continue\n    parts = [x for x in s.split("/") if x]\n    if any(x in EXCLUDE_DIRS for x in parts):\n        continue\n\n    base = os.path.basename(s).lower()\n    ext = os.path.splitext(base)[1]\n\n    is_todo_md = base.endswith(".md") and ("todo" in base)\n    if ext in CODE_EXTS or ext in IMAGE_EXTS or is_todo_md:\n        out.append(s)\n\nout.sort()\nfor s in out:\n    sys.stdout.buffer.write(s.encode("utf-8", errors="replace") + b"\\0")\n'
+  py=$'import os\nimport sys\n\nEXCLUDE_DIRS = {"dist", "_private", ".git", "node_modules", "vendor"}\n\nCODE_EXTS = {\n    ".php", ".py", ".js", ".ts", ".jsx", ".tsx",\n    ".css", ".less", ".scss", ".sass",\n    ".html", ".htm",\n    ".json", ".yml", ".yaml",\n    ".xml", ".toml", ".ini",\n    ".sh",\n}\n\nIMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico"}\n\nraw = sys.stdin.buffer.read().split(b"\\0")\nout = []\n\nfor p in raw:\n    if not p:\n        continue\n    s = p.decode("utf-8", errors="replace")\n    s = s[2:] if s.startswith("./") else s\n    if not s:\n        continue\n    parts = [x for x in s.split("/") if x]\n    if any(x in EXCLUDE_DIRS for x in parts):\n        continue\n\n    base = os.path.basename(s).lower()\n    ext = os.path.splitext(base)[1]\n\n    is_todo_md = base.endswith(".md") and ("todo" in base)\n    if ext in CODE_EXTS or ext in IMAGE_EXTS or is_todo_md:\n        out.append(s)\n\nout.sort()\nfor s in out:\n    sys.stdout.buffer.write(s.encode("utf-8", errors="replace") + b"\\0")\n'
 
   collect_files "$root" | python3 -c "$py"
 }
@@ -104,7 +104,7 @@ collect_files_dump() {
   local root="$1"
 
   local py
-  py=$'import os\nimport sys\n\nEXCLUDE_DIRS = {"dist", "_private", ".git"}\n\n# Only dump text-ish sources. Images are shown in the tree but not dumped.\nTEXT_EXTS = {\n    ".php", ".py", ".js", ".ts", ".jsx", ".tsx",\n    ".css", ".less", ".scss", ".sass",\n    ".html", ".htm",\n    ".json", ".yml", ".yaml",\n    ".xml", ".toml", ".ini",\n    ".sh",\n    ".sql",\n    ".txt",\n}\n\n# Explicitly skip common DB/binary container extensions.\nSKIP_EXTS = {\n    ".db", ".sqlite", ".sqlite3", ".mdb", ".accdb",\n    ".zip", ".tar", ".gz", ".bz2", ".7z", ".rar",\n    ".pdf", ".mp3", ".mp4", ".mov", ".avi", ".mkv",\n    ".exe", ".dll", ".so", ".dylib",\n}\n\nraw = sys.stdin.buffer.read().split(b"\\0")\nout = []\n\nfor p in raw:\n    if not p:\n        continue\n    s = p.decode("utf-8", errors="replace")\n    s = s[2:] if s.startswith("./") else s\n    if not s:\n        continue\n    parts = [x for x in s.split("/") if x]\n    if any(x in EXCLUDE_DIRS for x in parts):\n        continue\n\n    base = os.path.basename(s).lower()\n    ext = os.path.splitext(base)[1]\n    if ext in SKIP_EXTS:\n        continue\n\n    is_todo_md = base.endswith(".md") and ("todo" in base)\n    if ext in TEXT_EXTS or is_todo_md:\n        out.append(s)\n\nout.sort()\nfor s in out:\n    sys.stdout.buffer.write(s.encode("utf-8", errors="replace") + b"\\0")\n'
+  py=$'import os\nimport sys\n\nEXCLUDE_DIRS = {"dist", "_private", ".git", "node_modules", "vendor"}\n\n# Only dump text-ish sources. Images are shown in the tree but not dumped.\nTEXT_EXTS = {\n    ".php", ".py", ".js", ".ts", ".jsx", ".tsx",\n    ".css", ".less", ".scss", ".sass",\n    ".html", ".htm",\n    ".json", ".yml", ".yaml",\n    ".xml", ".toml", ".ini",\n    ".sh",\n    ".sql",\n    ".txt",\n}\n\n# Explicitly skip common DB/binary container extensions.\nSKIP_EXTS = {\n    ".db", ".sqlite", ".sqlite3", ".mdb", ".accdb",\n    ".zip", ".tar", ".gz", ".bz2", ".7z", ".rar",\n    ".pdf", ".mp3", ".mp4", ".mov", ".avi", ".mkv",\n    ".exe", ".dll", ".so", ".dylib",\n}\n\nraw = sys.stdin.buffer.read().split(b"\\0")\nout = []\n\nfor p in raw:\n    if not p:\n        continue\n    s = p.decode("utf-8", errors="replace")\n    s = s[2:] if s.startswith("./") else s\n    if not s:\n        continue\n    parts = [x for x in s.split("/") if x]\n    if any(x in EXCLUDE_DIRS for x in parts):\n        continue\n\n    base = os.path.basename(s).lower()\n    ext = os.path.splitext(base)[1]\n    if ext in SKIP_EXTS:\n        continue\n\n    is_todo_md = base.endswith(".md") and ("todo" in base)\n    if ext in TEXT_EXTS or is_todo_md:\n        out.append(s)\n\nout.sort()\nfor s in out:\n    sys.stdout.buffer.write(s.encode("utf-8", errors="replace") + b"\\0")\n'
 
   collect_files "$root" | python3 -c "$py"
 }
@@ -125,16 +125,6 @@ render_tree() {
   # Tree of INCLUDED files only (excludes gitignored, dist/, _private/).
   # Includes images in the tree, but they are not dumped below.
   collect_files_tree "$TARGET_ROOT" | render_tree || true
-  echo
-
-  echo "==== FILE LIST (with file:// links) ===="
-  while IFS= read -r -d '' rel; do
-    [[ -z "$rel" ]] && continue
-    rel="${rel#./}"
-    abs="$TARGET_ROOT/$rel"
-    echo "- $rel"
-    echo "  - file://$abs"
-  done < <(collect_files_tree "$TARGET_ROOT")
   echo
 
   echo "==== FILE CONTENTS ===="

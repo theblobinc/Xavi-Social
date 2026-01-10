@@ -28,7 +28,7 @@ To (re)install single pages/routes and upgrade the package, run the CLI inside t
 
 This is required whenever we add new single page routes such as:
 
-- `/xavi_social/api/me/ensure_account`
+- `/social/api/me/ensure_account`
 
 ## Frontend build
 

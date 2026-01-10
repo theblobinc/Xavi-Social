@@ -1,13 +1,36 @@
 .xv-shell {
+  --xv-bg: #0b0f16;
+  --xv-surface: #0f141c;
+  --xv-fg: #f7f9fc;
+  --xv-muted: rgba(247, 249, 252, 0.68);
+  --xv-border: rgba(255, 255, 255, 0.16);
+  --xv-input-bg: rgba(255, 255, 255, 0.04);
+  --xv-input-border: rgba(255, 255, 255, 0.28);
+  --xv-button-bg: rgba(255, 255, 255, 0.06);
+  --xv-link: #7ad7ff;
+  --xv-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
   position: relative;
   overflow: visible;
   padding: 16px 12px 24px;
-  background: #000;
-  color: #fff;
+  background: var(--xv-bg);
+  color: var(--xv-fg);
+}
+
+.xv-shell[data-theme="light"] {
+  --xv-bg: #f5f7fb;
+  --xv-surface: #ffffff;
+  --xv-fg: #0d121c;
+  --xv-muted: #4b5563;
+  --xv-border: rgba(13, 18, 28, 0.12);
+  --xv-input-bg: #ffffff;
+  --xv-input-border: rgba(13, 18, 28, 0.28);
+  --xv-button-bg: #e8ecf4;
+  --xv-link: #0f62fe;
+  --xv-shadow: 0 10px 30px rgba(13, 18, 28, 0.12);
 }
 
 .xv-shell a {
-  color: inherit;
+  color: var(--xv-link);
   text-decoration-color: currentColor;
 }
 
@@ -15,23 +38,24 @@
 .xv-shell a:hover,
 .xv-shell a:active,
 .xv-shell a:focus {
-  color: inherit;
+  color: var(--xv-link);
 }
 
 .xv-shell .text-muted {
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--xv-muted);
 }
 
 .xv-shell .panel {
-  background: #000;
-  color: inherit;
-  border-color: rgba(255, 255, 255, 0.18);
+  background: var(--xv-surface);
+  color: var(--xv-fg);
+  border-color: var(--xv-border);
+  box-shadow: var(--xv-shadow);
 }
 
 .xv-shell .panel-heading {
   background: transparent;
-  color: inherit;
-  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--xv-fg);
+  border-color: var(--xv-border);
 }
 
 .xv-shell .panel-body {
@@ -41,20 +65,26 @@
 .xv-shell .form-control,
 .xv-shell input,
 .xv-shell textarea {
-  background: transparent;
-  color: rgba(255, 255, 255, 0.85);
-  border-color: rgba(255, 255, 255, 0.28);
+  background: var(--xv-input-bg);
+  color: var(--xv-fg);
+  border-color: var(--xv-input-border);
+}
+
+.xv-shell .form-control::placeholder,
+.xv-shell input::placeholder,
+.xv-shell textarea::placeholder {
+  color: var(--xv-muted);
 }
 
 .xv-shell .btn-primary,
 .xv-shell .btn-default {
-  background: transparent;
-  color: inherit;
-  border-color: currentColor;
+  background: var(--xv-button-bg);
+  color: var(--xv-fg);
+  border-color: var(--xv-border);
 }
 
 .xv-shell .btn-link {
-  color: inherit;
+  color: var(--xv-link);
 }
 
 .xv-layout {

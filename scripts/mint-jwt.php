@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 // Minimal JWT (HS256) mint helper for CLI/MCP testing.
 //
-// This mirrors the package's /xavi_social/api/jwt encoder + API bearer decoders.
+// This mirrors the package's /social/api/jwt encoder + API bearer decoders.
 // It is intended for local/dev automation where you already control the secret.
 //
 // Usage:

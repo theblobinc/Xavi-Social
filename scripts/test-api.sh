@@ -61,13 +61,13 @@ if [[ -z "$JWT" ]]; then
   fi
 fi
 
-ME_URL="${BASE_URL%/}/xavi_social/api/me"
-DEBUG_URL="${BASE_URL%/}/xavi_social/api/debug"
-FEED_URL="${BASE_URL%/}/xavi_social/api/feed"
-POST_URL="${BASE_URL%/}/xavi_social/api/post"
-THREAD_URL="${BASE_URL%/}/xavi_social/api/thread"
-PROFILE_URL="${BASE_URL%/}/xavi_social/api/profile"
-NOTIFICATIONS_URL="${BASE_URL%/}/xavi_social/api/notifications"
+ME_URL="${BASE_URL%/}/social/api/me"
+DEBUG_URL="${BASE_URL%/}/social/api/debug"
+FEED_URL="${BASE_URL%/}/social/api/feed"
+POST_URL="${BASE_URL%/}/social/api/post"
+THREAD_URL="${BASE_URL%/}/social/api/thread"
+PROFILE_URL="${BASE_URL%/}/social/api/profile"
+NOTIFICATIONS_URL="${BASE_URL%/}/social/api/notifications"
 
 echo "BASE_URL: ${BASE_URL}"
 echo "ME_URL: ${ME_URL}"

@@ -21,6 +21,8 @@ if (!root) {
 const STORAGE_KEYS = {
   handleResolver: 'xv_atproto_handleResolver',
   lastHandle: 'xv_atproto_lastHandle',
+  theme: 'xavi.theme',
+  authPing: 'xavi.auth.ping',
 };
 
 function escapeHtml(value) {
@@ -78,6 +80,161 @@ function buildClientMetadata(origin) {
 function normalizeBaseUrl(value) {
   const v = String(value || '').trim();
   return v ? v.replace(/\/+$/, '') : '';
+}
+
+function isTruthyFlag(value) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+}
+
+function isPopupMode() {
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    return isTruthyFlag(params.get('popup'));
+  } catch (e) {
+    return false;
+  }
+}
+
+const THEME_OPTIONS = ['dark', 'light', 'system'];
+
+function readThemePreference() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEYS.theme);
+    if (stored && THEME_OPTIONS.includes(stored)) {
+      return stored;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return 'system';
+}
+
+function resolveTheme(preference) {
+  const pref = THEME_OPTIONS.includes(preference) ? preference : 'system';
+  if (pref === 'dark' || pref === 'light') {
+    return pref;
+  }
+  const mql = typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  return mql && typeof mql.matches === 'boolean' && mql.matches ? 'dark' : 'light';
+}
+
+let themePreference = readThemePreference();
+let activeTheme = resolveTheme(themePreference);
+
+function setThemePreference(nextPreference) {
+  themePreference = THEME_OPTIONS.includes(nextPreference) ? nextPreference : 'system';
+  try {
+    localStorage.setItem(STORAGE_KEYS.theme, themePreference);
+  } catch (e) {
+    // ignore
+  }
+  applyThemeToShell();
+}
+
+function applyThemeToShell() {
+  activeTheme = resolveTheme(themePreference);
+  const shell = root?.querySelector('.xv-shell');
+  if (shell) {
+    shell.dataset.theme = activeTheme;
+    shell.dataset.themePref = themePreference;
+  }
+}
+
+const AUTH_MESSAGES = {
+  loginComplete: 'xavi_social.login.complete',
+  oauthComplete: 'xavi_social.oauth.complete',
+};
+
+function notifyAuthComplete(type, detail = {}) {
+  const payload = { type, ...detail };
+  const origin = window.location.origin;
+  try {
+    if (window.opener) {
+      window.opener.postMessage(payload, origin);
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  try {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage(payload, origin);
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  try {
+    localStorage.setItem(STORAGE_KEYS.authPing, `${type}:${Date.now()}`);
+  } catch (e) {
+    // ignore
+  }
+}
+
+function closePopupWindow(fallbackUrl) {
+  try {
+    window.close();
+  } catch (e) {
+    // ignore
+  }
+
+  if (window.closed) {
+    return;
+  }
+
+  if (fallbackUrl) {
+    setTimeout(() => {
+      if (!window.closed) {
+        window.location.replace(fallbackUrl);
+      }
+    }, 150);
+  }
+}
+
+function setupCrossContextListeners() {
+  window.addEventListener('message', (event) => {
+    if (!event || event.origin !== window.location.origin) return;
+    const data = event.data;
+    if (!data || typeof data !== 'object') return;
+    const { type } = data;
+    if (type === AUTH_MESSAGES.loginComplete || type === AUTH_MESSAGES.oauthComplete) {
+      window.location.reload();
+    }
+  });
+
+  window.addEventListener('storage', (event) => {
+    if (!event) return;
+    if (event.key === STORAGE_KEYS.authPing) {
+      window.location.reload();
+    }
+    if (event.key === STORAGE_KEYS.theme) {
+      themePreference = readThemePreference();
+      applyThemeToShell();
+    }
+  });
+
+  const mql = typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  if (mql && typeof mql.addEventListener === 'function') {
+    mql.addEventListener('change', () => {
+      if (themePreference === 'system') {
+        applyThemeToShell();
+      }
+    });
+  } else if (mql && typeof mql.addListener === 'function') {
+    mql.addListener(() => {
+      if (themePreference === 'system') {
+        applyThemeToShell();
+      }
+    });
+  }
+
+  window.addEventListener('xavi:theme-change', (event) => {
+    const next = event?.detail?.theme;
+    if (next) {
+      setThemePreference(next);
+    }
+  });
 }
 
 function renderApp(session, atproto) {
@@ -1115,6 +1272,9 @@ function renderApp(session, atproto) {
     const route = parseRouteFromLocation();
     state.route = route;
 
+    const themeForRender = resolveTheme(themePreference);
+    activeTheme = themeForRender;
+
     let centerTitle = 'Timeline';
     let centerBody = renderFeedBody();
     if (route.name === 'thread') {
@@ -1135,7 +1295,7 @@ function renderApp(session, atproto) {
     }
 
     root.innerHTML = `
-      <div class="xv-shell">
+      <div class="xv-shell" data-theme="${escapeHtml(themeForRender)}" data-theme-pref="${escapeHtml(themePreference)}">
         <div class="xv-layout">
           <aside class="xv-col xv-left" aria-label="Sidebar">
             ${renderLeftColumn()}
@@ -1156,6 +1316,8 @@ function renderApp(session, atproto) {
         </div>
       </div>
     `;
+
+    applyThemeToShell();
 
     queueMicrotask(() => {
       syncFeedObserver();
@@ -1405,7 +1567,8 @@ function renderApp(session, atproto) {
 }
 
 async function fetchConcreteSession() {
-  const res = await fetch(apiUrl('session'), {
+  const sessionUrl = isPopupMode() ? `${apiUrl('session')}?popup=1` : apiUrl('session');
+  const res = await fetch(sessionUrl, {
     credentials: 'same-origin',
     headers: { Accept: 'application/json' },
   });
@@ -1418,8 +1581,11 @@ async function fetchConcreteSession() {
 async function main() {
   if (!root) return;
 
+  setupCrossContextListeners();
+
   const page = root.dataset.page;
   const origin = getOrigin();
+  const popupMode = isPopupMode();
 
   if (page === 'callback') {
     root.innerHTML = '<p>Completing…</p>';
@@ -1474,6 +1640,12 @@ async function main() {
           }).catch(() => {});
         }
       }
+
+      notifyAuthComplete(AUTH_MESSAGES.oauthComplete, { ok: true, did });
+      if (window.opener) {
+        closePopupWindow(getAppBase());
+        return;
+      }
     } catch (err) {
       root.innerHTML = `<p>Callback error: ${escapeHtml(String(err))}</p>`;
       return;
@@ -1489,6 +1661,12 @@ async function main() {
   } catch (err) {
     // If session can't be determined, default to read-only feed.
     renderApp({ loggedIn: false }, null);
+    return;
+  }
+
+  if (popupMode && session?.loggedIn) {
+    notifyAuthComplete(AUTH_MESSAGES.loginComplete, { userId: session.userId ?? null });
+    closePopupWindow(getAppBase());
     return;
   }
 

@@ -2,6 +2,14 @@
 
 ConcreteCMS package for the Xavi Social features. This repo contains the package only (not a full ConcreteCMS site).
 
+- Public SPA entry: https://www.princegeorge.app/social
+- API base: https://www.princegeorge.app/social/api
+- API docs: see API.md in this folder.
+
+- Public SPA entry: https://www.princegeorge.app/social
+- API base: https://www.princegeorge.app/social/api
+- API docs: see API.md in this folder.
+
 ## Frontend (Vite SPA)
 
 The frontend lives in `frontend/`.
@@ -52,3 +60,5 @@ Optional: Jetstream ingester (public posts)
 ## More docs
 
 - Docker notes: `docker/README.md`
+- API reference: `API.md`
+- API reference: `API.md`

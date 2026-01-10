@@ -168,6 +168,18 @@ class Thread extends PageController
             return $this->fetchThreadFromRecord($origin, $accessJwt, $uri);
         }
 
+        if ($status === 400 && is_array($json) && $this->isRecordMissing($json)) {
+            // Some PDS builds return InvalidRequest/"Could not locate record" instead of 404 when the
+            // AppView side is absent. Fall back to a repo.getRecord fetch in that case as well.
+            return $this->fetchThreadFromRecord($origin, $accessJwt, $uri);
+        }
+
+        if ($status === 400 && is_array($json) && $this->isRecordMissing($json)) {
+            // Some PDS builds return InvalidRequest/"Could not locate record" instead of 404 when the
+            // AppView side is absent. Fall back to a repo.getRecord fetch in that case as well.
+            return $this->fetchThreadFromRecord($origin, $accessJwt, $uri);
+        }
+
         if ($status < 200 || $status >= 300 || !is_array($json)) {
             if (is_array($json) && $status === 400) {
                 $err = trim((string) ($json['error'] ?? ''));
@@ -327,6 +339,38 @@ class Thread extends PageController
         }
 
         if ($msg !== '' && (str_contains($msg, 'method') && (str_contains($msg, 'not found') || str_contains($msg, 'not supported') || str_contains($msg, 'not implemented')))) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private function isRecordMissing(array $json): bool
+    {
+        $err = strtolower(trim((string) ($json['error'] ?? '')));
+        $msg = strtolower(trim((string) ($json['message'] ?? '')));
+
+        if ($msg !== '' && (str_contains($msg, 'could not locate record') || str_contains($msg, 'record not found'))) {
+            return true;
+        }
+
+        if ($err !== '' && (str_contains($err, 'recordnotfound') || str_contains($err, 'norecord'))) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private function isRecordMissing(array $json): bool
+    {
+        $err = strtolower(trim((string) ($json['error'] ?? '')));
+        $msg = strtolower(trim((string) ($json['message'] ?? '')));
+
+        if ($msg !== '' && (str_contains($msg, 'could not locate record') || str_contains($msg, 'record not found'))) {
+            return true;
+        }
+
+        if ($err !== '' && (str_contains($err, 'recordnotfound') || str_contains($err, 'norecord'))) {
             return true;
         }
 

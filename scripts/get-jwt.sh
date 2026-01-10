@@ -16,7 +16,7 @@ set -euo pipefail
 # BASE_URL defaults to https://www.princegeorge.app
 
 BASE_URL="${1:-${BASE_URL:-https://www.princegeorge.app}}"
-JWT_URL="${BASE_URL%/}/xavi_social/api/jwt"
+JWT_URL="${BASE_URL%/}/social/api/jwt"
 
 if [[ -z "${COOKIE_JAR:-}" && -z "${COOKIE:-}" ]]; then
   echo "ERROR: Missing cookie context. Set COOKIE_JAR (cookie file) or COOKIE (raw Cookie header value)." >&2

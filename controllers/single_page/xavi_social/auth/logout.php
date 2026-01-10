@@ -18,9 +18,22 @@ class Logout extends PageController
             $user->logout(false);
         }
 
-        $response = $this->app->make(ResponseFactoryInterface::class)->redirect('/social', Response::HTTP_FOUND);
+        $redirect = $this->isPopupRequest() ? '/social?popup=1' : '/social';
+        $response = $this->app->make(ResponseFactoryInterface::class)->redirect($redirect, Response::HTTP_FOUND);
         $response->headers->set('Cache-Control', 'no-store');
         $response->send();
         exit;
+    }
+
+    private function isPopupRequest(): bool
+    {
+        $value = $this->request->query->get('popup');
+        if ($value === null) {
+            return false;
+        }
+
+        $normalized = strtolower((string) $value);
+
+        return $normalized === '1' || $normalized === 'true' || $normalized === 'yes' || $normalized === 'on';
     }
 }
