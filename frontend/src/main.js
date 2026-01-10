@@ -36,12 +36,36 @@ function getOrigin() {
   return window.location.origin;
 }
 
+function getAppBase() {
+  const provided = typeof window.XAVI_APP_BASE === 'string' ? window.XAVI_APP_BASE : '';
+  const normalized = normalizeBaseUrl(provided);
+  return normalized || '/social';
+}
+
+function getApiBase() {
+  const provided = typeof window.XAVI_API_BASE === 'string' ? window.XAVI_API_BASE : '';
+  const normalized = normalizeBaseUrl(provided);
+  return normalized || `${getAppBase()}/api`;
+}
+
+function appUrl(path) {
+  const base = getAppBase();
+  const suffix = String(path || '').replace(/^\/+/, '');
+  return suffix ? `${base}/${suffix}` : base;
+}
+
+function apiUrl(path) {
+  const base = getApiBase();
+  const suffix = String(path || '').replace(/^\/+/, '');
+  return suffix ? `${base}/${suffix}` : base;
+}
+
 function buildClientMetadata(origin) {
   return {
-    client_id: `${origin}/xavi_social/client_metadata`,
+    client_id: `${origin}${appUrl('client_metadata')}`,
     client_name: 'Princegeorge Social',
-    client_uri: `${origin}/xavi_social`,
-    redirect_uris: [`${origin}/xavi_social/callback`],
+    client_uri: `${origin}${appUrl('')}`,
+    redirect_uris: [`${origin}${appUrl('callback')}`],
     scope: 'atproto',
     grant_types: ['authorization_code', 'refresh_token'],
     response_types: ['code'],
@@ -645,7 +669,7 @@ function renderApp(session, atproto) {
             throw new Error(message);
           }
         } else {
-          await fetchJson('/xavi_social/api/post', {
+          await fetchJson(apiUrl('post'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text }),
@@ -718,7 +742,7 @@ function renderApp(session, atproto) {
       } catch {
         // ignore
       }
-      window.location.assign('/xavi_social');
+      window.location.assign(getAppBase());
     });
   }
 
@@ -728,7 +752,7 @@ function renderApp(session, atproto) {
     paint();
 
     try {
-      const resp = await fetchJson('/xavi_social/api/feed?limit=30');
+      const resp = await fetchJson(`${apiUrl('feed')}?limit=30`);
       state.feed.source = resp?.source;
       state.feed.items = resp?.items || [];
       state.feed.loading = false;
@@ -752,7 +776,7 @@ function renderApp(session, atproto) {
     try {
       if (!uri) throw new Error('Missing thread URI.');
 
-      const url = `/xavi_social/api/thread?uri=${encodeURIComponent(uri)}`;
+      const url = `${apiUrl('thread')}?uri=${encodeURIComponent(uri)}`;
       const json = await fetchJson(url);
       state.thread.post = json?.post || null;
       state.thread.replies = json?.replies || [];
@@ -778,8 +802,8 @@ function renderApp(session, atproto) {
       const resolvedActor = actor || getDefaultActor();
 
       const url = resolvedActor
-        ? `/xavi_social/api/profile?actor=${encodeURIComponent(resolvedActor)}`
-        : '/xavi_social/api/profile';
+        ? `${apiUrl('profile')}?actor=${encodeURIComponent(resolvedActor)}`
+        : apiUrl('profile');
       const json = await fetchJson(url);
       state.profile.profile = json?.profile || null;
       state.profile.feed = json?.feed || [];
@@ -800,7 +824,7 @@ function renderApp(session, atproto) {
     paint();
 
     try {
-      const json = await fetchJson('/xavi_social/api/notifications?limit=30');
+      const json = await fetchJson(`${apiUrl('notifications')}?limit=30`);
       state.notifications.items = json?.items || [];
       state.notifications.loading = false;
       state.notifications.error = null;
@@ -846,7 +870,7 @@ function renderApp(session, atproto) {
 }
 
 async function fetchConcreteSession() {
-  const res = await fetch('/xavi_social/api/session', {
+  const res = await fetch(apiUrl('session'), {
     credentials: 'same-origin',
     headers: { Accept: 'application/json' },
   });
@@ -899,7 +923,7 @@ async function main() {
         };
 
         if (upsertBody.did) {
-          await fetch('/xavi_social/api/accounts/upsert', {
+          await fetch(apiUrl('accounts/upsert'), {
             method: 'POST',
             credentials: 'same-origin',
             headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
@@ -911,8 +935,8 @@ async function main() {
       root.innerHTML = `<p>Callback error: ${escapeHtml(String(err))}</p>`;
       return;
     }
-    window.history.replaceState({}, document.title, '/xavi_social');
-    window.location.assign('/xavi_social');
+    window.history.replaceState({}, document.title, getAppBase());
+    window.location.assign(getAppBase());
     return;
   }
 
@@ -928,7 +952,7 @@ async function main() {
   let localPdsAccount = null;
   if (session?.loggedIn) {
     try {
-      const res = await fetch('/xavi_social/api/me/ensure_account', {
+      const res = await fetch(apiUrl('me/ensure_account'), {
         method: 'POST',
         credentials: 'same-origin',
         headers: { Accept: 'application/json' },
