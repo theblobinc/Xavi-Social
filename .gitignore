@@ -25,3 +25,6 @@ pnpm-debug.log*
 
 # Vite build output (if generated in package root)
 /dist/
+
+# Sensitive local-only materials (never commit)
+/sample-code/
