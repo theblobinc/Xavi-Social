@@ -9,7 +9,7 @@ use Concrete\Core\Page\Controller\PageController;
 use Concrete\Core\User\User;
 use Symfony\Component\HttpFoundation\Response;
 
-final class Logout extends PageController
+class Logout extends PageController
 {
     public function view(): void
     {

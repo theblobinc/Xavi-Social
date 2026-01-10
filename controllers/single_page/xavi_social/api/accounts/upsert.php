@@ -9,7 +9,7 @@ use Concrete\Core\User\User;
 use Concrete\Package\XaviSocial\Crypto\TokenCipher;
 use Symfony\Component\HttpFoundation\JsonResponse;
 
-final class Upsert extends PageController
+class Upsert extends PageController
 {
     public function view(): void
     {

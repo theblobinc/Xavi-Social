@@ -13,7 +13,7 @@ use Concrete\Core\User\User;
 use GuzzleHttp\Client;
 use Symfony\Component\HttpFoundation\JsonResponse;
 
-final class Notifications extends PageController
+class Notifications extends PageController
 {
     public function view(): void
     {

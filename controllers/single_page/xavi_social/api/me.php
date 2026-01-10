@@ -9,7 +9,7 @@ use Concrete\Core\Support\Facade\Config;
 use Concrete\Core\User\User;
 use Symfony\Component\HttpFoundation\JsonResponse;
 
-final class Me extends PageController
+class Me extends PageController
 {
     public function view(): void
     {

@@ -10,7 +10,7 @@ use Concrete\Core\User\User;
 use Concrete\Package\XaviSocial\Atproto\LocalPdsProvisioner;
 use Symfony\Component\HttpFoundation\JsonResponse;
 
-final class EnsureAccount extends PageController
+class EnsureAccount extends PageController
 {
     public function view(): void
     {

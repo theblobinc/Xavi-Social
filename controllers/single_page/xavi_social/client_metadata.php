@@ -9,7 +9,7 @@ use Concrete\Core\Http\Request;
 use Concrete\Core\Support\Facade\Config;
 use Symfony\Component\HttpFoundation\JsonResponse;
 
-final class ClientMetadata extends PageController
+class ClientMetadata extends PageController
 {
     public function view(): void
     {

@@ -9,7 +9,7 @@ use Concrete\Core\Page\Controller\PageController;
 use Concrete\Core\User\PostLoginLocation;
 use Symfony\Component\HttpFoundation\Response;
 
-final class Login extends PageController
+class Login extends PageController
 {
     public function view(): void
     {

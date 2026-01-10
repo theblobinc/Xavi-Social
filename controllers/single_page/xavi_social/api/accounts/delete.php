@@ -8,7 +8,7 @@ use Concrete\Core\Page\Controller\PageController;
 use Concrete\Core\User\User;
 use Symfony\Component\HttpFoundation\JsonResponse;
 
-final class Delete extends PageController
+class Delete extends PageController
 {
     public function view(): void
     {

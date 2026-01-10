@@ -6,7 +6,7 @@ namespace Concrete\Package\XaviSocial\Controller\SinglePage\XaviSocial;
 
 use Concrete\Core\Page\Controller\PageController;
 
-final class Callback extends PageController
+class Callback extends PageController
 {
     public function view(): void
     {

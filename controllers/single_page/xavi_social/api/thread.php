@@ -13,7 +13,7 @@ use Concrete\Core\User\User;
 use GuzzleHttp\Client;
 use Symfony\Component\HttpFoundation\JsonResponse;
 
-final class Thread extends PageController
+class Thread extends PageController
 {
     public function view(): void
     {

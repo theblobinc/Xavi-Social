@@ -13,7 +13,7 @@ use Concrete\Package\XaviSocial\Atproto\LocalPdsProvisioner;
 use GuzzleHttp\Client;
 use Symfony\Component\HttpFoundation\JsonResponse;
 
-final class Feed extends PageController
+class Feed extends PageController
 {
     public function view(): void
     {
