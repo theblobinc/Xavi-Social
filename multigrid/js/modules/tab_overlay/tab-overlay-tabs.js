@@ -38,28 +38,67 @@
         }
     }
 
+    function ensureWorkspaceBackgroundHost(ws) {
+        const root = ws?.shadowRoot;
+        if (!root) return null;
+
+        let bgLayer = root.querySelector('.xavi-bg-layer');
+        if (!bgLayer) {
+            bgLayer = document.createElement('div');
+            bgLayer.className = 'xavi-bg-layer';
+            root.appendChild(bgLayer);
+        }
+
+        let host = bgLayer.querySelector('#' + BG_HOST_ID);
+        if (!host) {
+            host = document.createElement('div');
+            host.id = BG_HOST_ID;
+            host.setAttribute('aria-hidden', 'true');
+            bgLayer.insertBefore(host, bgLayer.firstChild || null);
+        }
+
+        return host;
+    }
+
     function getBackgroundHost() {
+        const ws = getWorkspace();
+        if (!ws) return null;
+
         const taskbar = getTaskbar();
-        if (!taskbar) return null;
+        // IMPORTANT: the taskbar creates the background layer inside the workspace content area
+        // (MultiGrid shadow DOM), not inside the taskbar shadow DOM.
+        let bgLayer = null;
+
         try {
             // Ensure it exists (taskbar provides this helper).
-            if (typeof taskbar.ensureBackgroundLayer === 'function') {
-                taskbar.ensureBackgroundLayer();
+            if (taskbar && typeof taskbar.ensureBackgroundLayer === 'function') {
+                bgLayer = taskbar.ensureBackgroundLayer();
             }
         } catch (e) {
             // ignore
         }
+
         try {
-            return taskbar.shadowRoot?.getElementById?.(BG_HOST_ID) || taskbar.shadowRoot?.querySelector?.('#' + BG_HOST_ID) || null;
+            const direct = (
+                bgLayer?.querySelector?.('#' + BG_HOST_ID)
+                || taskbar?.contentArea?.querySelector?.('#' + BG_HOST_ID)
+                || ws?.shadowRoot?.getElementById?.(BG_HOST_ID)
+                || ws?.shadowRoot?.querySelector?.('#' + BG_HOST_ID)
+                || ws?.querySelector?.('#' + BG_HOST_ID)
+                || null
+            );
+            return direct || ensureWorkspaceBackgroundHost(ws);
         } catch (e) {
-            return null;
+            return ensureWorkspaceBackgroundHost(ws);
         }
     }
 
     function ensureBackgroundStylesInjected() {
-        const taskbar = getTaskbar();
-        if (!taskbar?.shadowRoot) return;
-        if (taskbar.shadowRoot.getElementById(BG_STYLE_ID)) return;
+        const ws = getWorkspace();
+        // Background host lives in the workspace shadow root/content area.
+        const root = ws?.shadowRoot;
+        if (!root) return;
+        if (root.getElementById(BG_STYLE_ID)) return;
 
         const style = document.createElement('style');
         style.id = BG_STYLE_ID;
@@ -100,7 +139,7 @@
             }
         `;
 
-        taskbar.shadowRoot.appendChild(style);
+        root.appendChild(style);
     }
 
     function ensureBackgroundNodes() {
@@ -500,7 +539,9 @@
         ensureStylesInjected(ws);
 
         // Always ensure background exists and defaults to feed.
-        setBackgroundMode(TAB_TIMELINE);
+        // IMPORTANT: Taskbar/template may not be ready on the first tick; keep polling until we can
+        // actually mount the social app into the background layer.
+        const backgroundOk = setBackgroundMode(TAB_TIMELINE);
 
         const overlay = findOverlay();
         if (!overlay) {
@@ -509,7 +550,8 @@
 
         ensureOverlayTabbed(overlay);
         syncTabUI(overlay);
-        return true;
+
+        return Boolean(backgroundOk);
     }
 
     // Public API used by other modules (eg. Social) to open/select a tab.
@@ -537,7 +579,8 @@
             if (init()) {
                 return;
             }
-            if (attempts > 60) {
+                // Taskbar/template is fetched async; allow a few seconds.
+                if (attempts > 600) {
                 return;
             }
             requestAnimationFrame(tick);

@@ -69,7 +69,7 @@ class Taskbar extends HTMLElement {
 
         this.availableTabs = {
             'playlist-viewer': {
-                label: '📋 Playlist Viewer',
+                label: '⚙ Settings',
                 component: 'playlist-viewer',
                 section: null,
                 requiresAdmin: false
@@ -1393,10 +1393,95 @@ class Taskbar extends HTMLElement {
         overlay.id = PLAYLIST_OVERLAY_ID;
         overlay.className = 'playlist-overlay';
 
+        // Repurposed: this slide-out overlay is Settings-only.
+        overlay.dataset.mode = 'settings';
+
         const content = document.createElement('div');
         content.className = 'playlist-overlay-content';
-        const viewer = document.createElement('playlist-viewer');
-        content.appendChild(viewer);
+
+        // Settings UI (no playlist DOM / no #playlist-scroll / no #playlist-tabs)
+        const settingsRoot = document.createElement('div');
+        settingsRoot.className = 'xavi-settings';
+        settingsRoot.innerHTML = `
+            <div class="xavi-settings__header" role="tablist" aria-label="Settings">
+                <button type="button" class="xavi-settings__tab" data-tab="appview" role="tab" aria-selected="false">AppView</button>
+                <button type="button" class="xavi-settings__tab" data-tab="social" role="tab" aria-selected="false">Social</button>
+                <button type="button" class="xavi-settings__tab" data-tab="concrete" role="tab" aria-selected="false">Concrete</button>
+            </div>
+            <div class="xavi-settings__body">
+                <div class="xavi-settings__panel" data-panel="appview" role="tabpanel">
+                    <div class="xavi-settings__section-title">AppView</div>
+                    <div class="xavi-settings__hint">AppView settings will go here.</div>
+                </div>
+                <div class="xavi-settings__panel" data-panel="social" role="tabpanel">
+                    <div class="xavi-settings__section-title">Social</div>
+                    <label class="xavi-settings__row">
+                        <input type="checkbox" class="xavi-settings__checkbox" data-setting="xaviSocial.profileSettingsInSettings" />
+                        <span>Profile settings live in Settings panel</span>
+                    </label>
+                    <div class="xavi-settings__hint">(Toggle now; options can be added later.)</div>
+                </div>
+                <div class="xavi-settings__panel" data-panel="concrete" role="tabpanel">
+                    <div class="xavi-settings__section-title">ConcreteCMS</div>
+                    <div class="xavi-settings__hint">ConcreteCMS settings can be added here later.</div>
+                </div>
+            </div>
+        `;
+        content.appendChild(settingsRoot);
+
+        // Persist/restore active tab + toggles.
+        const storageKeyTab = 'xavi.settings.activeTab';
+        const tabs = Array.from(settingsRoot.querySelectorAll('.xavi-settings__tab'));
+        const panels = Array.from(settingsRoot.querySelectorAll('.xavi-settings__panel'));
+        const selectTab = (tabId) => {
+            const id = String(tabId || '').trim() || 'social';
+            tabs.forEach((btn) => {
+                const active = String(btn.dataset.tab || '') === id;
+                btn.classList.toggle('is-active', active);
+                btn.setAttribute('aria-selected', active ? 'true' : 'false');
+            });
+            panels.forEach((panel) => {
+                const show = String(panel.dataset.panel || '') === id;
+                panel.style.display = show ? 'block' : 'none';
+            });
+            try {
+                localStorage.setItem(storageKeyTab, id);
+            } catch (e) {
+                // ignore
+            }
+        };
+
+        settingsRoot.addEventListener('click', (e) => {
+            const btn = e.target?.closest?.('.xavi-settings__tab');
+            if (!btn) return;
+            selectTab(btn.dataset.tab);
+        });
+
+        const checkboxEls = Array.from(settingsRoot.querySelectorAll('input.xavi-settings__checkbox[data-setting]'));
+        checkboxEls.forEach((cb) => {
+            const key = String(cb.dataset.setting || '').trim();
+            if (!key) return;
+            try {
+                cb.checked = localStorage.getItem(key) === '1';
+            } catch (e) {
+                cb.checked = false;
+            }
+            cb.addEventListener('change', () => {
+                try {
+                    localStorage.setItem(key, cb.checked ? '1' : '0');
+                } catch (e) {
+                    // ignore
+                }
+            });
+        });
+
+        let initial = 'social';
+        try {
+            initial = localStorage.getItem(storageKeyTab) || initial;
+        } catch (e) {
+            // ignore
+        }
+        selectTab(initial);
         overlay.appendChild(content);
         const resizeHandle = document.createElement('div');
         resizeHandle.className = 'playlist-resize-handle';
@@ -1406,7 +1491,7 @@ class Taskbar extends HTMLElement {
         const toggleTab = document.createElement('button');
         toggleTab.id = PLAYLIST_TOGGLE_ID;
         toggleTab.className = 'playlist-toggle-tab';
-        toggleTab.title = 'Toggle Playlist Viewer';
+        toggleTab.title = 'Toggle Settings';
         const arrow = document.createElement('span');
         arrow.className = 'arrow';
         arrow.textContent = '▶';
@@ -4373,17 +4458,24 @@ class Taskbar extends HTMLElement {
         if (!bgLayer) {
             bgLayer = document.createElement('div');
             bgLayer.className = 'xavi-bg-layer';
-
-            const background = document.createElement('div');
-            background.id = 'xavi-social-background';
-            background.setAttribute('aria-hidden', 'true');
-
-            const grid = document.createElement('div');
-            grid.id = 'workspace-grid';
-
-            bgLayer.append(background, grid);
             // Insert as first child of content-area
             this.contentArea.insertBefore(bgLayer, this.contentArea.firstChild || null);
+        }
+
+        // Ensure required children exist even if another module created the layer first.
+        let background = bgLayer.querySelector('#xavi-social-background');
+        if (!background) {
+            background = document.createElement('div');
+            background.id = 'xavi-social-background';
+            background.setAttribute('aria-hidden', 'true');
+            bgLayer.insertBefore(background, bgLayer.firstChild || null);
+        }
+
+        let grid = bgLayer.querySelector('#workspace-grid');
+        if (!grid) {
+            grid = document.createElement('div');
+            grid.id = 'workspace-grid';
+            bgLayer.appendChild(grid);
         }
 
         this.applyBackgroundLayerStyles(bgLayer);
@@ -6649,25 +6741,32 @@ class Taskbar extends HTMLElement {
     }
 
     notifyComponents() {
-        this.panelSelections.forEach(tabId => {
-            const tabInfo = this.availableTabs[tabId];
-            if (!tabInfo || tabId === 'video-player') return;
+        // Keep this lightweight: only nudge special components that need a
+        // post-render refresh.
+        const selections = Array.isArray(this.panelSelections) ? this.panelSelections : [];
+        selections.forEach((tabId) => {
+            if (!tabId) return;
+            const tabInfo = this.availableTabs?.[tabId] || null;
+            if (!tabInfo) return;
 
-            const component = this.componentInstances[tabId];
-            if (component && component.isConnected) {
-                if (typeof component.onTabVisible === 'function') {
-                    component.onTabVisible();
-                }
+            if (tabInfo.component === 'playlist-viewer') {
+                const overlay = this.specialComponents?.['playlist-viewer']?.overlay || null;
+                const component =
+                    overlay?.querySelector?.('playlist-viewer') ||
+                    document.querySelector('playlist-viewer');
+                if (!component) return;
 
-                if (tabInfo.component === 'playlist-viewer') {
-                    setTimeout(() => {
+                setTimeout(() => {
+                    try {
                         if (typeof component.updatePlaylistView === 'function') {
                             component.updatePlaylistView();
                         } else if (typeof component.render === 'function') {
                             component.render();
                         }
-                    }, 100);
-                }
+                    } catch (err) {
+                        // Ignore component refresh errors.
+                    }
+                }, 100);
             }
         });
     }

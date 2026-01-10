@@ -325,16 +325,16 @@ final class LocalPdsProvisioner
                 return rtrim(trim((string) $override), '/');
             }
 
-            // NOTE: Do not use http://nginx here; this repo uses an external shared Docker network
-            // and multiple stacks may publish the hostname "nginx", causing nondeterministic DNS.
-            return 'http://princegeorge-app-nginx';
+            // Prefer the docker-compose service name. If your environment needs something else,
+            // set XAVI_SOCIAL_INTERNAL_HTTP_ORIGIN.
+            return 'http://nginx';
         }
 
         $host = (string) parse_url($publicOrigin, PHP_URL_HOST);
         $host = strtolower(trim($host));
 
         if ($host === 'localhost' || $host === '127.0.0.1' || $host === '0.0.0.0') {
-            return 'http://princegeorge-app-nginx';
+            return 'http://nginx';
         }
 
         return rtrim($publicOrigin, '/');

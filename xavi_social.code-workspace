@@ -8,6 +8,9 @@
 		},
 		{
 			"path": "../../../.."
+		},
+		{
+			"path": "../../../../../xavi.app/docker/compose/appview-feed"
 		}
 	],
 	"settings": {}

@@ -37,36 +37,8 @@
 
     queuePanelRegistration(() => entryConfig);
 
-    // Auto-launch once when the workspace becomes ready.
-    window.addEventListener('xavi-workspace-ready', (event) => {
-        try {
-            if (window.__xaviSocialOverlayAutoLaunched) {
-                return;
-            }
-            window.__xaviSocialOverlayAutoLaunched = true;
-            // Default: Social feed should be the grid background, without forcing the playlist overlay open.
-            openSocialTab({ workspace: event?.detail?.workspace }, { openOverlay: false });
-        } catch (e) {
-            // ignore
-        }
-    });
-
-    // Fallback: if something loads after the ready event, attempt once on DOMContentLoaded.
-    document.addEventListener('DOMContentLoaded', () => {
-        try {
-            if (window.__xaviSocialOverlayAutoLaunched) {
-                return;
-            }
-            const ws = document.querySelector('xavi-multi-grid');
-            if (!ws) {
-                return;
-            }
-            window.__xaviSocialOverlayAutoLaunched = true;
-            openSocialTab({ workspace: ws }, { openOverlay: false });
-        } catch (e) {
-            // ignore
-        }
-    }, { once: true });
+    // NOTE: Social no longer auto-launches into the grid background.
+    // Open it from the Start menu / panels so it behaves like a normal app panel.
 
     function getTaskbar(workspace) {
         const ws = workspace || document.querySelector('xavi-multi-grid');
@@ -78,46 +50,23 @@
     }
 
     function openSocialTab(context = {}, options = {}) {
-        const { openOverlay = true } = options || {};
-
-        // Preferred: drive everything through the tab overlay inside the grid.
-        if (typeof window.openTabOverlayTab === 'function' && openOverlay) {
-            window.openTabOverlayTab('timeline');
-            return true;
-        }
-
-        if (typeof window.selectTabOverlayTab === 'function') {
-            window.selectTabOverlayTab('timeline');
-            if (openOverlay) {
-                const taskbar = getTaskbar(context?.workspace);
-                if (taskbar && typeof taskbar.openPlaylistOverlay === 'function') {
-                    taskbar.openPlaylistOverlay();
-                }
-            }
-            return true;
-        }
-
-        // Fallback (should not happen once tab_overlay is loaded): legacy body overlay.
-        spawnSocialOverlay(context);
-        return true;
-    }
-
-    function closeSocialTab(context = {}) {
+        // Social runs as its own panel overlay (not inside the playlist slide-out).
+        // Return the element so the taskbar can track it as a panel instance.
+        const el = spawnSocialOverlay(context);
         try {
-            if (typeof window.selectTabOverlayTab === 'function') {
-                window.selectTabOverlayTab('playlist');
-            }
-
-            const taskbar = getTaskbar(context?.workspace);
-            if (taskbar && typeof taskbar.closePlaylistOverlay === 'function') {
-                taskbar.closePlaylistOverlay({ retainTaskview: false, persistState: false });
-                return true;
+            if (el && typeof el.focusPanel === 'function') {
+                el.focusPanel();
+            } else if (el && typeof el.bringToFront === 'function') {
+                el.bringToFront();
             }
         } catch (e) {
             // ignore
         }
+        return el;
+    }
 
-        // Fallback: close legacy overlay if present.
+    function closeSocialTab(context = {}) {
+        // Close overlay if present.
         const el = findExistingOverlay();
         if (el && typeof el.closePanel === 'function') {
             el.closePanel();

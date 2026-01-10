@@ -360,8 +360,7 @@ class Post extends PageController
                 return rtrim(trim((string) $override), '/');
             }
 
-            // NOTE: Do not use http://nginx here; this repo uses an external shared Docker network.
-            return 'http://princegeorge-app-nginx';
+            return 'http://nginx';
         }
 
         $override = getenv('XAVI_SOCIAL_INTERNAL_HTTP_ORIGIN');
@@ -373,7 +372,7 @@ class Post extends PageController
         $host = strtolower(trim($host));
 
         if ($host === '' || $host === 'localhost' || $host === '127.0.0.1' || $host === '0.0.0.0') {
-            return 'http://princegeorge-app-nginx';
+            return 'http://nginx';
         }
 
         return rtrim($publicOrigin, '/');

@@ -10,6 +10,7 @@ use Concrete\Core\Page\Controller\PageController;
 use Concrete\Core\Support\Facade\Config;
 use Concrete\Core\User\User;
 use Concrete\Package\XaviSocial\Atproto\LocalPdsProvisioner;
+use Concrete\Package\XaviSocial\Storage\Postgres;
 use GuzzleHttp\Client;
 use Symfony\Component\HttpFoundation\JsonResponse;
 
@@ -18,7 +19,193 @@ class Feed extends PageController
     public function view(): void
     {
         $payload = $this->fetchLocalOrGlobalTimeline();
+
+        // Only merge public cached posts into the non-user (public/global) feed.
+        $mode = (string) ($payload['mode'] ?? '');
+        if ($mode !== 'pds_user') {
+            $limit = (int) $this->request->query->get('limit', 30);
+            if ($limit <= 0) {
+                $limit = 30;
+            }
+            if ($limit > 100) {
+                $limit = 100;
+            }
+
+            $baseItems = [];
+            if (isset($payload['items']) && is_array($payload['items'])) {
+                $baseItems = $payload['items'];
+            }
+
+            $cachedCursorIn = (string) $this->request->query->get('cachedCursor', '');
+            [$cachedItems, $cachedCursorOut] = $this->fetchCachedPublicTimeline($limit, $cachedCursorIn);
+            if ($cachedCursorOut !== '') {
+                $payload['cachedCursor'] = $cachedCursorOut;
+            }
+            if (!empty($cachedItems)) {
+                $payload['items'] = $this->mergeAndSortItems($baseItems, $cachedItems, $limit);
+            }
+        }
+
         $this->sendJson($payload);
+    }
+
+    /**
+     * @return array<int,array<string,mixed>>
+     */
+    private function fetchCachedPublicTimeline(int $limit, string $cursor): array
+    {
+        $pdo = Postgres::connect();
+        if (!$pdo) {
+            return [[], ''];
+        }
+
+        try {
+            Postgres::ensureSchema($pdo);
+        } catch (\Throwable $e) {
+            return [[], ''];
+        }
+
+        if ($limit <= 0) {
+            $limit = 30;
+        }
+        if ($limit > 100) {
+            $limit = 100;
+        }
+
+        $cursorTs = null;
+        $cursorUri = '';
+        $cursor = trim($cursor);
+        if ($cursor !== '') {
+            $parts = explode('|', $cursor, 2);
+            if (count($parts) === 2) {
+                $cursorTs = trim($parts[0]);
+                $cursorUri = trim($parts[1]);
+            }
+        }
+
+        try {
+            $sql =
+                "SELECT raw, updated_at, uri\n" .
+                "FROM xavi_social_cached_posts\n" .
+                "WHERE audience = 'public'\n";
+
+            if ($cursorTs !== null && $cursorUri !== '') {
+                $sql .=
+                    "  AND (updated_at < :cursor_ts OR (updated_at = :cursor_ts AND uri < :cursor_uri))\n";
+            }
+
+            $sql .=
+                "ORDER BY updated_at DESC, uri DESC\n" .
+                "LIMIT :limit";
+
+            $stmt = $pdo->prepare($sql);
+            if ($cursorTs !== null && $cursorUri !== '') {
+                $stmt->bindValue('cursor_ts', $cursorTs, \PDO::PARAM_STR);
+                $stmt->bindValue('cursor_uri', $cursorUri, \PDO::PARAM_STR);
+            }
+            $stmt->bindValue('limit', $limit, \PDO::PARAM_INT);
+            $stmt->execute();
+            $rows = $stmt->fetchAll();
+        } catch (\Throwable $e) {
+            return [[], ''];
+        }
+
+        if (!is_array($rows)) {
+            return [[], ''];
+        }
+
+        $nextCursor = '';
+        if (!empty($rows)) {
+            $last = $rows[count($rows) - 1];
+            if (is_array($last)) {
+                $lastUpdated = (string) ($last['updated_at'] ?? '');
+                $lastUri = (string) ($last['uri'] ?? '');
+                if ($lastUpdated !== '' && $lastUri !== '') {
+                    $nextCursor = $lastUpdated . '|' . $lastUri;
+                }
+            }
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $raw = $row['raw'] ?? null;
+            if (is_string($raw)) {
+                $item = json_decode($raw, true);
+            } else {
+                $item = $raw;
+            }
+
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $uri = trim((string) ($item['uri'] ?? ''));
+            if ($uri === '') {
+                continue;
+            }
+
+            $author = $item['author'] ?? null;
+            if (!is_array($author)) {
+                $author = [];
+            }
+
+            $out[] = [
+                'uri' => $uri,
+                'cid' => (string) ($item['cid'] ?? ''),
+                'text' => (string) ($item['text'] ?? ''),
+                'createdAt' => (string) ($item['createdAt'] ?? ''),
+                'indexedAt' => (string) ($item['indexedAt'] ?? ''),
+                'author' => [
+                    'did' => (string) ($author['did'] ?? ''),
+                    'handle' => (string) ($author['handle'] ?? ''),
+                    'displayName' => (string) ($author['displayName'] ?? ''),
+                    'avatar' => (string) ($author['avatar'] ?? ''),
+                ],
+            ];
+        }
+
+        return [$out, $nextCursor];
+    }
+
+    /**
+     * @param array<int,array<string,mixed>> $a
+     * @param array<int,array<string,mixed>> $b
+     * @return array<int,array<string,mixed>>
+     */
+    private function mergeAndSortItems(array $a, array $b, int $limit): array
+    {
+        $seen = [];
+        $out = [];
+
+        foreach ([$a, $b] as $items) {
+            foreach ($items as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                $uri = (string) ($item['uri'] ?? '');
+                if ($uri === '' || isset($seen[$uri])) {
+                    continue;
+                }
+                $seen[$uri] = true;
+                $out[] = $item;
+            }
+        }
+
+        usort($out, static function (array $x, array $y): int {
+            $tx = strtotime((string) ($x['indexedAt'] ?? $x['createdAt'] ?? '')) ?: 0;
+            $ty = strtotime((string) ($y['indexedAt'] ?? $y['createdAt'] ?? '')) ?: 0;
+            return $ty <=> $tx;
+        });
+
+        if ($limit > 0 && count($out) > $limit) {
+            $out = array_slice($out, 0, $limit);
+        }
+
+        return $out;
     }
 
     /**
@@ -278,8 +465,7 @@ class Feed extends PageController
                 return rtrim(trim((string) $override), '/');
             }
 
-            // NOTE: Do not use http://nginx here; this repo uses an external shared Docker network.
-            return 'http://princegeorge-app-nginx';
+            return 'http://nginx';
         }
 
         $override = getenv('XAVI_SOCIAL_INTERNAL_HTTP_ORIGIN');
@@ -291,7 +477,7 @@ class Feed extends PageController
         $host = strtolower(trim($host));
 
         if ($host === '' || $host === 'localhost' || $host === '127.0.0.1' || $host === '0.0.0.0') {
-            return 'http://princegeorge-app-nginx';
+            return 'http://nginx';
         }
 
         return rtrim($publicOrigin, '/');

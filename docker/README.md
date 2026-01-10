@@ -6,10 +6,12 @@ This folder is intentionally minimal. It’s meant to be a reference/starting po
 
 Provides Postgres + Redis + MinIO for local development.
 
-- Postgres: `127.0.0.1:5432`
-- Redis: `127.0.0.1:6379`
-- MinIO S3: `127.0.0.1:9000`
-- MinIO console: `127.0.0.1:9001`
+These services run on the private Docker network `ai_invest` (the same network as `princegeorge-app-php`).
+
+- Postgres: `postgres:5432`
+- Redis: `redis:6379`
+- MinIO S3: `minio:9000`
+- MinIO console: `minio:9001` (not published to the host)
 
 ### Start
 
@@ -28,8 +30,41 @@ Provides Postgres + Redis + MinIO for local development.
 
 ## Notes
 
-- These services bind to localhost. If you already have Postgres/Redis running on the host, you’ll get port conflicts.
+- These services do not publish ports to the host; they’re intended to be accessed from other containers on `ai_invest`.
+- Ensure the `ai_invest` network exists (the main app stack uses it as an external network).
 - This is backend plumbing only; ConcreteCMS itself is not containerized here because this repo only contains the package.
+
+## Jetstream ingester (public Bluesky firehose)
+
+Consumes the public Bluesky Jetstream WebSocket and upserts public posts into Postgres (`xavi_social_cached_posts`) with `origin='jetstream'`.
+
+This is intended for the “public merged feed” path (no login required).
+
+### Start
+
+- Preferred:
+   - `./scripts/jetstream-ingester.sh up`
+- Or manually:
+   - `cd docker/compose/jetstream && docker compose up -d --build`
+
+### Stop
+
+- Preferred:
+   - `./scripts/jetstream-ingester.sh down`
+- Or manually:
+   - `cd docker/compose/jetstream && docker compose down`
+
+### Health
+
+- `./scripts/jetstream-ingester.sh health`
+
+Expected:
+- prints exactly: `ingesting OK`
+
+### Notes
+
+- The ingester reuses `docker/compose/datastore/.env` for `PG_PASSWORD`.
+- Cursor state is persisted in a named Docker volume so restarts resume.
 
 ## Frontend build (Dockerized)
 

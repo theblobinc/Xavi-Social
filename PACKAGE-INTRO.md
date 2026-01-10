@@ -103,3 +103,7 @@ If you tell me your preferred frontend approach inside Concrete (pure Web Compon
 Dev docker (reference)
 
 There is a minimal backend datastore compose in `packages/xavi_social/docker/` (patterned after `xavi.app`), intended for local Postgres/Redis/MinIO only.
+
+Public ingestion (Jetstream)
+
+Optionally, a small Jetstream ingester service can consume the public Bluesky firehose and write public posts into Postgres (`xavi_social_cached_posts`). This supports the scalable “public merged feed” path without requiring a logged-in ATProto session.

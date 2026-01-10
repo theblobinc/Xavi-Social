@@ -378,7 +378,7 @@ class Notifications extends PageController
                 return rtrim(trim((string) $override), '/');
             }
 
-            return 'http://princegeorge-app-nginx';
+            return 'http://nginx';
         }
 
         $override = getenv('XAVI_SOCIAL_INTERNAL_HTTP_ORIGIN');
@@ -390,7 +390,7 @@ class Notifications extends PageController
         $host = strtolower(trim($host));
 
         if ($host === '' || $host === 'localhost' || $host === '127.0.0.1' || $host === '0.0.0.0') {
-            return 'http://princegeorge-app-nginx';
+            return 'http://nginx';
         }
 
         return rtrim($publicOrigin, '/');

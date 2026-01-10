@@ -10,10 +10,9 @@ services:
       POSTGRES_PASSWORD: ${PG_PASSWORD}
     volumes:
       - ../../data/postgres:/var/lib/postgresql/data
-    ports: ["127.0.0.1:5432:5432"]
     restart: unless-stopped
     networks:
-      default:
+      ai_invest:
         aliases: [postgres]
 
   redis:
@@ -21,10 +20,9 @@ services:
     command: ["redis-server","--save","60","1000","--appendonly","yes"]
     volumes:
       - ../../data/redis:/data
-    ports: ["127.0.0.1:6379:6379"]
     restart: unless-stopped
     networks:
-      default:
+      ai_invest:
         aliases: [redis]
 
   minio:
@@ -35,14 +33,11 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     volumes:
       - ../../data/minio:/data
-    ports:
-      - "127.0.0.1:9000:9000" # S3
-      - "127.0.0.1:9001:9001" # Console
     restart: unless-stopped
     networks:
-      default:
+      ai_invest:
         aliases: [minio]
 
 networks:
-  default:
-    name: xavi-social-datastore_default
+  ai_invest:
+    external: true

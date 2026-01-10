@@ -15,3 +15,14 @@ COMPOSE_DIR="$BASE/compose"
 ( cd "$COMPOSE_DIR/datastore" && $COMPOSE_CMD up -d )
 
 echo ">> Started: datastore"
+
+( cd "$COMPOSE_DIR/pds" && $COMPOSE_CMD up -d )
+
+echo ">> Started: pds"
+
+if [[ "${XAVI_SOCIAL_ENABLE_JETSTREAM:-0}" == "1" ]]; then
+  ( cd "$COMPOSE_DIR/jetstream" && $COMPOSE_CMD up -d --build )
+  echo ">> Started: jetstream"
+else
+  echo ">> Skipped: jetstream (set XAVI_SOCIAL_ENABLE_JETSTREAM=1 to enable)"
+fi

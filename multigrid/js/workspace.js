@@ -298,6 +298,28 @@ class XaviMultiGridWorkspace extends HTMLElement {
                 pointer-events: auto;
                 position: relative;
                 z-index: 10;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                box-sizing: border-box;
+                background: rgba(12, 12, 12, 0.96);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 10px;
+                backdrop-filter: blur(10px);
+            }
+
+            .panel-handle {
+                height: 22px;
+                flex: 0 0 22px;
+                cursor: move;
+                background: rgba(255, 255, 255, 0.06);
+                border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+            }
+
+            .panel-body {
+                flex: 1 1 auto;
+                min-height: 0;
+                overflow: hidden;
             }
 
             /* Floating overlays are attached into #floating-panel-layer by their modules. */

@@ -12,6 +12,14 @@ COMPOSE_CMD="$(find_compose)"
 BASE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_DIR="$BASE/compose"
 
+( cd "$COMPOSE_DIR/jetstream" && $COMPOSE_CMD down )
+
+echo ">> Stopped: jetstream"
+
+( cd "$COMPOSE_DIR/pds" && $COMPOSE_CMD down )
+
+echo ">> Stopped: pds"
+
 ( cd "$COMPOSE_DIR/datastore" && $COMPOSE_CMD down )
 
 echo ">> Stopped: datastore"

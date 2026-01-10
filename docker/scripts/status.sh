@@ -13,3 +13,7 @@ BASE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_DIR="$BASE/compose"
 
 ( cd "$COMPOSE_DIR/datastore" && $COMPOSE_CMD ps )
+
+( cd "$COMPOSE_DIR/pds" && $COMPOSE_CMD ps )
+
+( cd "$COMPOSE_DIR/jetstream" && $COMPOSE_CMD ps )

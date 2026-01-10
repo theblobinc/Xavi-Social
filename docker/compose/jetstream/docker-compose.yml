@@ -1,0 +1,38 @@
+name: xavi_social_jetstream
+
+services:
+  jetstream_ingester:
+    build:
+      context: ../../../jetstream
+      dockerfile: Dockerfile
+    container_name: xavi-social-jetstream-ingester
+    env_file:
+      - ../datastore/.env
+    environment:
+      # Which public Jetstream instance to consume
+      JETSTREAM_URL: ${JETSTREAM_URL:-wss://jetstream2.us-west.bsky.network/subscribe}
+      WANTED_COLLECTIONS: ${WANTED_COLLECTIONS:-app.bsky.feed.post}
+      # Optional: comma-separated list of DIDs to filter (empty = all repos)
+      WANTED_DIDS: ${WANTED_DIDS:-}
+
+      # Where to persist the last cursor so restarts resume
+      CURSOR_FILE: /data/jetstream.cursor
+      CURSOR_REWIND_US: ${CURSOR_REWIND_US:-2000000}
+
+      # Postgres connection (private docker network)
+      XAVI_SOCIAL_PG_HOST: ${XAVI_SOCIAL_PG_HOST:-postgres}
+      XAVI_SOCIAL_PG_PORT: ${XAVI_SOCIAL_PG_PORT:-5432}
+      XAVI_SOCIAL_PG_DB: ${XAVI_SOCIAL_PG_DB:-xavi_social}
+      XAVI_SOCIAL_PG_USER: ${XAVI_SOCIAL_PG_USER:-xavi_social}
+    volumes:
+      - jetstream_cursor_data:/data
+    restart: unless-stopped
+    networks:
+      - ai_invest
+
+networks:
+  ai_invest:
+    external: true
+
+volumes:
+  jetstream_cursor_data:

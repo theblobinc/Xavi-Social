@@ -1,0 +1,13 @@
+{
+  "name": "xavi-social-jetstream-ingester",
+  "private": true,
+  "version": "0.0.1",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "pg": "^8.13.1",
+    "ws": "^8.18.0"
+  }
+}

@@ -8,22 +8,31 @@
 
 .xv-shell a {
   color: inherit;
+  text-decoration-color: currentColor;
+}
+
+.xv-shell a:visited,
+.xv-shell a:hover,
+.xv-shell a:active,
+.xv-shell a:focus {
+  color: inherit;
 }
 
 .xv-shell .text-muted {
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .xv-shell .panel {
   background: transparent;
   color: inherit;
   border-color: rgba(255, 255, 255, 0.18);
-}
+  background: #000;
 
 .xv-shell .panel-heading {
   background: transparent;
   color: inherit;
-  border-color: rgba(255, 255, 255, 0.18);
+  color: inherit;
+  text-decoration-color: currentColor;
 }
 
 .xv-shell .panel-body {
@@ -34,7 +43,7 @@
 .xv-shell input,
 .xv-shell textarea {
   background: transparent;
-  color: inherit;
+  color: rgba(255, 255, 255, 0.85);
   border-color: rgba(255, 255, 255, 0.28);
 }
 

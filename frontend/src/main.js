@@ -88,18 +88,265 @@ function renderApp(session, atproto) {
 
   let state = {
     route: { name: 'feed' },
-    feed: { loading: true, error: null, items: [] },
+    feed: {
+      loading: true,
+      loadingMore: false,
+      error: null,
+      items: [],
+      source: '',
+      cachedCursor: '',
+      hasMore: true,
+    },
     thread: { loading: false, error: null, uri: null, post: null, replies: [] },
     profile: { loading: false, error: null, actor: null, profile: null, feed: [] },
     notifications: { loading: false, error: null, items: [] },
     posting: false,
     postError: null,
     connectError: null,
-    accounts: { loading: false, error: null, items: [] },
+      accounts: {
+        loading: false,
+        error: null,
+        items: [],
+      },
+      search: {
+        loading: false,
+        error: null,
+        q: '',
+        items: [],
+      },
   };
 
   const atprotoSession = atproto?.session || null;
   const atprotoClientFactory = atproto?.getClient || null;
+
+  let _handlersBound = false;
+  let _routeAbortController = null;
+  let _feedObserver = null;
+  let _feedPollTimer = null;
+  let _feedPollAbortController = null;
+  let _loadMoreAbortController = null;
+
+  function isAbortError(err) {
+    return Boolean(err && (err.name === 'AbortError' || err.code === 20));
+  }
+
+  function bindDelegatedHandlers() {
+    if (_handlersBound || !root) return;
+    _handlersBound = true;
+
+    root.addEventListener('submit', async (e) => {
+      const form = e.target;
+      if (!(form instanceof HTMLFormElement)) return;
+
+      if (form.id === 'post-form') {
+        e.preventDefault();
+        if (!loggedIn || state.posting) return;
+
+        const textarea = document.getElementById('post-text');
+        const text = textarea && textarea.value ? String(textarea.value).trim() : '';
+        if (!text) return;
+
+        state.posting = true;
+        state.postError = null;
+        paint();
+
+        try {
+          if (atprotoSession) {
+            const tokenSet = await atprotoSession.getTokenSet('auto');
+            const pdsUrl = normalizeBaseUrl(tokenSet?.aud);
+            const did = tokenSet?.sub || atprotoSession.did;
+
+            if (!pdsUrl || !did) {
+              throw new Error('ATProto session is missing PDS/DID');
+            }
+
+            const resp = await atprotoSession.fetchHandler(`${pdsUrl}/xrpc/com.atproto.repo.createRecord`, {
+              method: 'POST',
+              headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                repo: did,
+                collection: 'app.bsky.feed.post',
+                record: {
+                  $type: 'app.bsky.feed.post',
+                  text,
+                  createdAt: new Date().toISOString(),
+                },
+              }),
+            });
+
+            const postedText = await resp.text();
+            const postedJson = postedText ? JSON.parse(postedText) : null;
+            if (!resp.ok) {
+              const message = (postedJson && (postedJson.message || postedJson.error)) || `ATProto post failed (${resp.status})`;
+              throw new Error(message);
+            }
+          } else {
+            await fetchJson(apiUrl('post'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text }),
+            });
+          }
+
+          if (textarea) textarea.value = '';
+          await loadFeed();
+        } catch (err) {
+          if (!isAbortError(err)) {
+            state.postError = err?.message || String(err);
+          }
+        } finally {
+          state.posting = false;
+          paint();
+        }
+      }
+
+      if (form.id === 'atproto-connect') {
+        e.preventDefault();
+        if (!loggedIn) return;
+
+        const resolverInput = document.getElementById('atproto-resolver');
+        const handleInput = document.getElementById('atproto-handle');
+        const resolver = normalizeBaseUrl(resolverInput?.value);
+        const handle = String(handleInput?.value || '').trim();
+
+        state.connectError = null;
+        paint();
+
+        if (!resolver) {
+          state.connectError = 'Enter your PDS / handle resolver URL.';
+          paint();
+          return;
+        }
+        if (!handle) {
+          state.connectError = 'Enter a handle.';
+          paint();
+          return;
+        }
+
+        try {
+          localStorage.setItem(STORAGE_KEYS.handleResolver, resolver);
+          localStorage.setItem(STORAGE_KEYS.lastHandle, handle);
+
+          if (!atprotoClientFactory) {
+            throw new Error('OAuth client unavailable.');
+          }
+
+          const client = atprotoClientFactory(resolver);
+          await client.signIn(handle);
+        } catch (err) {
+          if (!isAbortError(err)) {
+            state.connectError = err?.message || String(err);
+            paint();
+          }
+        }
+      }
+    });
+
+    root.addEventListener('click', async (e) => {
+      const el = e.target instanceof Element ? e.target : null;
+      if (!el) return;
+
+      const btn = el.closest('button');
+      if (!btn) return;
+
+      if (btn.id === 'atproto-disconnect') {
+        e.preventDefault();
+        if (!atprotoSession) return;
+        try {
+          await atprotoSession.signOut();
+        } catch {
+          // ignore
+        }
+        window.location.assign(getAppBase());
+        return;
+      }
+
+      const action = btn.getAttribute('data-action');
+      if (!action) return;
+
+      // Prevent default for all action buttons (some are placeholders).
+      e.preventDefault();
+
+      if (action === 'remove-account') {
+        const id = btn.getAttribute('data-account-id');
+        if (!id) return;
+        await deleteLinkedAccount(id);
+      }
+    });
+  }
+
+    async function loadLinkedAccounts() {
+      if (!loggedIn) return;
+
+      state.accounts.loading = true;
+      state.accounts.error = null;
+      paint();
+
+      try {
+        const json = await fetchJson(apiUrl('accounts'));
+        state.accounts.items = Array.isArray(json?.accounts) ? json.accounts : [];
+        state.accounts.loading = false;
+        state.accounts.error = null;
+      } catch (err) {
+        state.accounts.loading = false;
+        state.accounts.error = err?.message || String(err);
+        state.accounts.items = [];
+      }
+
+      paint();
+    }
+
+    async function deleteLinkedAccount(accountId) {
+      if (!loggedIn) return;
+      const id = Number(accountId) || 0;
+      if (!id) return;
+
+      try {
+        await fetchJson(apiUrl('accounts/delete'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accountId: id }),
+        });
+      } catch (err) {
+        state.accounts.error = err?.message || String(err);
+        paint();
+        return;
+      }
+
+      await loadLinkedAccounts();
+    }
+
+    async function loadSearch(q, signal) {
+      const query = (q || '').trim();
+      state.search.q = query;
+      state.search.loading = Boolean(query);
+      state.search.error = null;
+      state.search.items = [];
+      paint();
+
+      if (!query) {
+        state.search.loading = false;
+        paint();
+        return;
+      }
+
+      try {
+        const json = await fetchJson(`${apiUrl('search')}?q=${encodeURIComponent(query)}&limit=50`, { signal });
+        state.search.items = Array.isArray(json?.items) ? json.items : [];
+        state.search.loading = false;
+        state.search.error = null;
+      } catch (err) {
+        if (isAbortError(err)) return;
+        state.search.loading = false;
+        state.search.error = err?.message || String(err);
+        state.search.items = [];
+      }
+
+      paint();
+    }
 
   function encodeRoutePart(value) {
     return encodeURIComponent(String(value || ''));
@@ -113,11 +360,30 @@ function renderApp(session, atproto) {
     }
   }
 
+  function normalizeActor(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+
+    // DID is always acceptable.
+    if (/^did:[a-z0-9]+:[A-Za-z0-9._:%-]+$/.test(raw)) {
+      return raw;
+    }
+
+    // Handle: keep this strict to avoid passing local usernames (e.g. "admin-...")
+    // into XRPC calls. ATProto handles are DNS-like.
+    if (/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/.test(raw)) {
+      return raw.toLowerCase();
+    }
+
+    return '';
+  }
+
   function getDefaultActor() {
     const localHandle = localPdsAccount && localPdsAccount.handle ? String(localPdsAccount.handle) : '';
     const localDid = localPdsAccount && localPdsAccount.did ? String(localPdsAccount.did) : '';
     const did = atprotoSession?.did ? String(atprotoSession.did) : '';
-    return localHandle || did || localDid || '';
+    // Prefer DID (most reliable for XRPC) over local handle.
+    return normalizeActor(did) || normalizeActor(localDid) || normalizeActor(localHandle) || '';
   }
 
   function parseRouteFromLocation() {
@@ -129,7 +395,7 @@ function renderApp(session, atproto) {
     if (name === 'feed') return { name: 'feed' };
     if (name === 'notifications') return { name: 'notifications' };
     if (name === 'profile') {
-      const actor = decodeRoutePart(rest.join('/')) || getDefaultActor();
+      const actor = normalizeActor(decodeRoutePart(rest.join('/'))) || getDefaultActor();
       return { name: 'profile', actor };
     }
     if (name === 'thread') {
@@ -150,7 +416,10 @@ function renderApp(session, atproto) {
     const r = nextRoute && typeof nextRoute === 'object' ? nextRoute : { name: 'feed' };
     let hash = '#feed';
     if (r.name === 'notifications') hash = '#notifications';
-    if (r.name === 'profile') hash = `#profile/${encodeRoutePart(r.actor || getDefaultActor())}`;
+    if (r.name === 'profile') {
+      const actor = normalizeActor(r.actor) || getDefaultActor();
+      hash = actor ? `#profile/${encodeRoutePart(actor)}` : '#profile';
+    }
     if (r.name === 'thread') hash = `#thread/${encodeRoutePart(r.uri || '')}`;
     if (r.name === 'media') hash = '#media';
     if (r.name === 'search') {
@@ -311,7 +580,7 @@ function renderApp(session, atproto) {
       return `<div class="panel panel-default"><div class="panel-body text-muted">No posts yet.</div></div>`;
     }
 
-    return items
+    const feedHtml = items
       .map((item) => {
         const authorName = (item.author && (item.author.displayName || item.author.handle)) || 'Account';
         const authorHandle = (item.author && item.author.handle) || '';
@@ -343,6 +612,183 @@ function renderApp(session, atproto) {
         `;
       })
       .join('');
+
+    const moreLabel = state.feed.loadingMore
+      ? 'Loading more…'
+      : state.feed.hasMore
+        ? ' '
+        : 'No more posts.';
+    return `${feedHtml}<div id="feed-sentinel" class="text-muted small" style="padding: 10px 0;">${escapeHtml(moreLabel)}</div>`;
+  }
+
+  function getScrollTop() {
+    const se = document.scrollingElement;
+    const top = se && typeof se.scrollTop === 'number' ? se.scrollTop : window.scrollY;
+    return typeof top === 'number' ? top : 0;
+  }
+
+  function stopFeedPolling() {
+    if (_feedPollTimer) {
+      clearInterval(_feedPollTimer);
+      _feedPollTimer = null;
+    }
+    if (_feedPollAbortController) {
+      try {
+        _feedPollAbortController.abort();
+      } catch {
+        // ignore
+      }
+      _feedPollAbortController = null;
+    }
+  }
+
+  function startFeedPolling() {
+    stopFeedPolling();
+    _feedPollTimer = setInterval(async () => {
+      if (!root) return;
+      if (state.route?.name !== 'feed') return;
+      if (state.feed.loading || state.feed.loadingMore) return;
+      // Avoid jumpiness: only auto-refresh when the user is near the top.
+      if (getScrollTop() > 80) return;
+
+      if (_feedPollAbortController) {
+        try {
+          _feedPollAbortController.abort();
+        } catch {
+          // ignore
+        }
+      }
+      _feedPollAbortController = new AbortController();
+      const signal = _feedPollAbortController.signal;
+
+      try {
+        const limit = 30;
+        const localResp = await fetchJson(`${apiUrl('feed')}?limit=${limit}`, { signal });
+        const localItems = Array.isArray(localResp?.items) ? localResp.items : [];
+        const newCursor = typeof localResp?.cachedCursor === 'string' ? localResp.cachedCursor : '';
+
+        if (newCursor) {
+          state.feed.cachedCursor = state.feed.cachedCursor || newCursor;
+          state.feed.hasMore = true;
+        }
+
+        const existing = Array.isArray(state.feed.items) ? state.feed.items : [];
+        const merged = mergeAndSortItems(existing, localItems);
+        if (merged.length !== existing.length) {
+          state.feed.items = merged;
+          paint();
+        }
+      } catch (err) {
+        if (isAbortError(err)) return;
+      }
+    }, 15000);
+  }
+
+  function mergeAndSortItems(existingItems, nextItems) {
+    const seen = new Set();
+    const merged = [...(Array.isArray(existingItems) ? existingItems : []), ...(Array.isArray(nextItems) ? nextItems : [])].filter((item) => {
+      const key = item?.uri ? String(item.uri) : '';
+      if (!key) return false;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    merged.sort((a, b) => {
+      const ta = Date.parse(a?.indexedAt || a?.createdAt || '') || 0;
+      const tb = Date.parse(b?.indexedAt || b?.createdAt || '') || 0;
+      if (tb !== ta) return tb - ta;
+      const ua = a?.uri ? String(a.uri) : '';
+      const ub = b?.uri ? String(b.uri) : '';
+      return ub.localeCompare(ua);
+    });
+
+    return merged;
+  }
+
+  async function loadMoreCached() {
+    if (state.route?.name !== 'feed') return;
+    if (state.feed.loading || state.feed.loadingMore) return;
+    if (!state.feed.hasMore) return;
+    const cursor = (state.feed.cachedCursor || '').trim();
+    if (!cursor) {
+      state.feed.hasMore = false;
+      paint();
+      return;
+    }
+
+    if (_loadMoreAbortController) {
+      try {
+        _loadMoreAbortController.abort();
+      } catch {
+        // ignore
+      }
+    }
+    _loadMoreAbortController = new AbortController();
+    const signal = _loadMoreAbortController.signal;
+
+    state.feed.loadingMore = true;
+    paint();
+
+    try {
+      const limit = 30;
+      const url = `${apiUrl('feed')}?limit=${limit}&cachedCursor=${encodeURIComponent(cursor)}`;
+      const json = await fetchJson(url, { signal });
+      const items = Array.isArray(json?.items) ? json.items : [];
+      const nextCursor = typeof json?.cachedCursor === 'string' ? json.cachedCursor : '';
+
+      const existing = Array.isArray(state.feed.items) ? state.feed.items : [];
+      state.feed.items = mergeAndSortItems(existing, items);
+      state.feed.cachedCursor = nextCursor;
+      state.feed.hasMore = Boolean(nextCursor);
+      state.feed.loadingMore = false;
+      paint();
+    } catch (err) {
+      if (isAbortError(err)) return;
+      state.feed.loadingMore = false;
+      paint();
+    }
+  }
+
+  function syncFeedObserver() {
+    if (!root) return;
+
+    if (state.route?.name !== 'feed') {
+      if (_feedObserver) {
+        try {
+          _feedObserver.disconnect();
+        } catch {
+          // ignore
+        }
+        _feedObserver = null;
+      }
+      stopFeedPolling();
+      return;
+    }
+
+    const sentinel = root.querySelector('#feed-sentinel');
+    if (!sentinel) return;
+
+    if (_feedObserver) {
+      try {
+        _feedObserver.disconnect();
+      } catch {
+        // ignore
+      }
+      _feedObserver = null;
+    }
+
+    _feedObserver = new IntersectionObserver(
+      (entries) => {
+        const hit = entries && entries.some((e) => e.isIntersecting);
+        if (hit) {
+          loadMoreCached();
+        }
+      },
+      { root: null, rootMargin: '600px 0px 600px 0px', threshold: 0 }
+    );
+    _feedObserver.observe(sentinel);
+    startFeedPolling();
   }
 
   function renderThreadBody() {
@@ -385,37 +831,6 @@ function renderApp(session, atproto) {
         `;
       })
       .join('');
-  }
-
-  function normalizeText(value) {
-    return String(value || '').toLowerCase();
-  }
-
-  function renderSearchBody(query) {
-    const q = String(query || '').trim();
-    if (!q) {
-      return `<div class="panel panel-default"><div class="panel-body text-muted">Type a search term in the tab overlay search box.</div></div>`;
-    }
-
-    const haystack = Array.isArray(state.feed.items) ? state.feed.items : [];
-    const qn = normalizeText(q);
-    const matches = haystack.filter((item) => {
-      const text = normalizeText(item?.text);
-      const handle = normalizeText(item?.author?.handle);
-      const name = normalizeText(item?.author?.displayName);
-      return text.includes(qn) || handle.includes(qn) || name.includes(qn);
-    });
-
-    if (matches.length === 0) {
-      return `<div class="panel panel-default"><div class="panel-body text-muted">No matches for <strong>${escapeHtml(q)}</strong>.</div></div>`;
-    }
-
-    // Reuse feed rendering, but temporarily swap items.
-    const prevItems = state.feed.items;
-    state.feed.items = matches;
-    const html = renderFeedBody();
-    state.feed.items = prevItems;
-    return html;
   }
 
   function hasMedia(item) {
@@ -607,13 +1022,20 @@ function renderApp(session, atproto) {
     const localHandle = localPdsAccount && localPdsAccount.handle ? String(localPdsAccount.handle) : '';
     const localDid = localPdsAccount && localPdsAccount.did ? String(localPdsAccount.did) : '';
 
+    const localHtml =
+      localHandle || localDid
+        ? `<div class="text-muted small">Local PDS account: <strong>@${escapeHtml(localHandle || localDid)}</strong></div>`
+        : `<div class="text-muted small">Local PDS account not provisioned.</div>`;
+
     const sessionHtml = atprotoSession
       ? `<div class="text-muted small">Connected DID: <span style="word-break: break-all;">${escapeHtml(atprotoSession.did)}</span></div>`
-      : localHandle || localDid
-        ? `<div class="text-muted small">Local PDS account: <strong>@${escapeHtml(localHandle || localDid)}</strong></div>`
-        : `<div class="text-muted small">No ATProto account connected.</div>`;
+      : `<div class="text-muted small">No Bluesky/ATProto account connected.</div>`;
 
-    const connectFormHtml = localHandle || localDid
+    const disconnectHtml = atprotoSession
+      ? '<div style="margin-top: 8px;"><button type="button" id="atproto-disconnect" class="btn btn-link btn-sm" style="padding-left: 0;">Disconnect</button></div>'
+      : '';
+
+    const connectFormHtml = atprotoSession
       ? ''
       : `
             <form id="atproto-connect" style="margin-top: 10px;">
@@ -628,9 +1050,34 @@ function renderApp(session, atproto) {
               </div>
 
               <button type="submit" class="btn btn-default btn-sm">Connect</button>
-              ${atprotoSession ? '<button type="button" id="atproto-disconnect" class="btn btn-link btn-sm">Disconnect</button>' : ''}
             </form>
       `;
+
+    const accounts = Array.isArray(state.accounts.items) ? state.accounts.items : [];
+    const accountsBody = state.accounts.loading
+      ? '<div class="text-muted small">Loading linked accounts…</div>'
+      : state.accounts.error
+        ? `<div class="text-muted small">Linked accounts error: ${escapeHtml(String(state.accounts.error))}</div>`
+        : accounts.length
+          ? `
+              <ul class="list-unstyled" style="margin: 8px 0 0 0;">
+                ${accounts
+                  .map((acc) => {
+                    const handle = (acc && acc.handle ? String(acc.handle) : '').trim();
+                    const did = (acc && acc.did ? String(acc.did) : '').trim();
+                    const issuer = (acc && acc.issuer ? String(acc.issuer) : '').trim();
+                    const id = acc && acc.id != null ? Number(acc.id) : 0;
+                    const label = handle ? `@${handle}` : did ? did : 'Account';
+                    const meta = issuer ? 'linked' : 'local';
+                    const removeBtn = issuer && id
+                      ? ` <button type="button" class="btn btn-link btn-xs" data-action="remove-account" data-account-id="${escapeHtml(String(id))}" style="padding-left: 6px;">Remove</button>`
+                      : '';
+                    return `<li class="text-muted small" style="margin-top: 4px; word-break: break-all;"><strong>${escapeHtml(label)}</strong> <span>(${escapeHtml(meta)})</span>${removeBtn}</li>`;
+                  })
+                  .join('')}
+              </ul>
+            `
+          : '<div class="text-muted small">No linked accounts yet.</div>';
 
     return (
       whoHtml +
@@ -638,9 +1085,15 @@ function renderApp(session, atproto) {
         <div class="panel panel-default">
           <div class="panel-heading"><strong>ATProto</strong></div>
           <div class="panel-body">
+            ${localHtml}
             ${sessionHtml}
+            ${disconnectHtml}
             ${connectFormHtml}
             ${connectErrorHtml}
+              <div style="margin-top: 10px;">
+                <div class="text-muted" style="font-size: 12px;"><strong>Linked accounts</strong></div>
+                ${accountsBody}
+              </div>
           </div>
         </div>
       `
@@ -704,139 +1157,72 @@ function renderApp(session, atproto) {
       </div>
     `;
 
-    const postForm = document.getElementById('post-form');
-    postForm?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      if (!loggedIn || state.posting) return;
-
-      const textarea = document.getElementById('post-text');
-      const text = textarea && textarea.value ? String(textarea.value).trim() : '';
-      if (!text) return;
-
-      state.posting = true;
-      state.postError = null;
-      paint();
-
-      try {
-        if (atprotoSession) {
-          const tokenSet = await atprotoSession.getTokenSet('auto');
-          const pdsUrl = normalizeBaseUrl(tokenSet?.aud);
-          const did = tokenSet?.sub || atprotoSession.did;
-
-          if (!pdsUrl || !did) {
-            throw new Error('ATProto session is missing PDS/DID');
-          }
-
-          const resp = await atprotoSession.fetchHandler(`${pdsUrl}/xrpc/com.atproto.repo.createRecord`, {
-            method: 'POST',
-            headers: {
-              Accept: 'application/json',
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              repo: did,
-              collection: 'app.bsky.feed.post',
-              record: {
-                $type: 'app.bsky.feed.post',
-                text,
-                createdAt: new Date().toISOString(),
-              },
-            }),
-          });
-
-          const postedText = await resp.text();
-          const postedJson = postedText ? JSON.parse(postedText) : null;
-          if (!resp.ok) {
-            const message = (postedJson && (postedJson.message || postedJson.error)) || `ATProto post failed (${resp.status})`;
-            throw new Error(message);
-          }
-        } else {
-          await fetchJson(apiUrl('post'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text }),
-          });
-        }
-
-        if (textarea) textarea.value = '';
-        await loadFeed();
-      } catch (err) {
-        state.postError = err?.message || String(err);
-      } finally {
-        state.posting = false;
-        paint();
-      }
-    });
-
-    root.querySelectorAll('button[data-action]')?.forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-      });
-    });
-
-    const connectForm = document.getElementById('atproto-connect');
-    connectForm?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      if (!loggedIn) return;
-
-      const resolverInput = document.getElementById('atproto-resolver');
-      const handleInput = document.getElementById('atproto-handle');
-      const resolver = normalizeBaseUrl(resolverInput?.value);
-      const handle = String(handleInput?.value || '').trim();
-
-      state.connectError = null;
-      paint();
-
-      if (!resolver) {
-        state.connectError = 'Enter your PDS / handle resolver URL.';
-        paint();
-        return;
-      }
-      if (!handle) {
-        state.connectError = 'Enter a handle.';
-        paint();
-        return;
-      }
-
-      try {
-        localStorage.setItem(STORAGE_KEYS.handleResolver, resolver);
-        localStorage.setItem(STORAGE_KEYS.lastHandle, handle);
-
-        if (!atprotoClientFactory) {
-          throw new Error('OAuth client unavailable.');
-        }
-
-        const client = atprotoClientFactory(resolver);
-        await client.signIn(handle);
-      } catch (err) {
-        state.connectError = err?.message || String(err);
-        paint();
-      }
-    });
-
-    const disconnectBtn = document.getElementById('atproto-disconnect');
-    disconnectBtn?.addEventListener('click', async (e) => {
-      e.preventDefault();
-      if (!atprotoSession) return;
-
-      try {
-        await atprotoSession.signOut();
-      } catch {
-        // ignore
-      }
-      window.location.assign(getAppBase());
+    queueMicrotask(() => {
+      syncFeedObserver();
     });
   }
 
-  async function loadTimeline() {
+  async function loadTimeline(signal) {
     state.feed.loading = true;
     state.feed.error = null;
+    state.feed.hasMore = true;
+    state.feed.loadingMore = false;
     paint();
 
     try {
-      const resp = await fetchJson(`${apiUrl('feed')}?limit=30`);
-      state.feed.source = resp?.source;
-      state.feed.items = resp?.items || [];
+      const limit = 30;
+
+      let localItems = [];
+      let localSource = null;
+      let remoteItems = [];
+
+      const errors = [];
+
+      // Always fetch the local timeline. For guests, the API returns the public cached/Jetstream feed.
+      // For logged-in Concrete users, it can return their local PDS feed.
+      try {
+        const localResp = await fetchJson(`${apiUrl('feed')}?limit=${limit}`, { signal });
+        localSource = localResp?.source || null;
+        localItems = Array.isArray(localResp?.items) ? localResp.items : [];
+        state.feed.cachedCursor = typeof localResp?.cachedCursor === 'string' ? localResp.cachedCursor : '';
+        state.feed.hasMore = Boolean(state.feed.cachedCursor);
+      } catch (err) {
+        if (isAbortError(err)) return;
+        errors.push(err?.message || String(err));
+        localItems = [];
+      }
+
+      // If the browser has an OAuth session, use it for the authenticated timeline.
+      if (atprotoSession) {
+        try {
+          const tokenSet = await atprotoSession.getTokenSet('auto');
+          const base = normalizeBaseUrl(tokenSet?.aud);
+          if (!base) throw new Error('ATProto session is missing audience/PDS URL.');
+
+          const json = await atpFetchJson(`${base}/xrpc/app.bsky.feed.getTimeline?limit=${limit}`, { signal });
+          const feed = Array.isArray(json?.feed) ? json.feed : [];
+
+          remoteItems = feed
+            .map((entry) => normalizeAtprotoPostFromTimeline(entry?.post))
+            .filter((p) => p && typeof p === 'object' && p.uri);
+        } catch (err) {
+          if (isAbortError(err)) return;
+          errors.push(err?.message || String(err));
+          remoteItems = [];
+        }
+      }
+
+      const merged = mergeAndSortItems(remoteItems, localItems);
+
+      if (!merged.length) {
+        throw new Error(errors[0] || 'No items returned.');
+      }
+
+      const sourceParts = [];
+      if (remoteItems.length) sourceParts.push('atproto');
+      if (localItems.length) sourceParts.push('local');
+      state.feed.source = sourceParts.length ? sourceParts.join('+') : localSource || 'unknown';
+      state.feed.items = merged;
       state.feed.loading = false;
       state.feed.error = null;
     } catch (err) {
@@ -848,11 +1234,11 @@ function renderApp(session, atproto) {
   }
 
   // Back-compat helper (some handlers call loadFeed()).
-  async function loadFeed() {
-    return await loadTimeline();
+  async function loadFeed(signal) {
+    return await loadTimeline(signal);
   }
 
-  async function loadThread(uri) {
+  async function loadThread(uri, signal) {
     state.thread.loading = true;
     state.thread.error = null;
     state.thread.uri = uri || null;
@@ -864,12 +1250,13 @@ function renderApp(session, atproto) {
       if (!uri) throw new Error('Missing thread URI.');
 
       const url = `${apiUrl('thread')}?uri=${encodeURIComponent(uri)}`;
-      const json = await fetchJson(url);
+      const json = await fetchJson(url, { signal });
       state.thread.post = json?.post || null;
       state.thread.replies = json?.replies || [];
       state.thread.loading = false;
       state.thread.error = null;
     } catch (err) {
+      if (isAbortError(err)) return;
       state.thread.loading = false;
       state.thread.error = err?.message || String(err);
     }
@@ -877,27 +1264,31 @@ function renderApp(session, atproto) {
     paint();
   }
 
-  async function loadProfile(actor) {
+  async function loadProfile(actor, signal) {
     state.profile.loading = true;
     state.profile.error = null;
-    state.profile.actor = actor || getDefaultActor();
+    state.profile.actor = normalizeActor(actor) || getDefaultActor();
     state.profile.profile = null;
     state.profile.feed = [];
     paint();
 
     try {
-      const resolvedActor = actor || getDefaultActor();
+      const resolvedActor = normalizeActor(actor) || getDefaultActor();
+      if (!resolvedActor) {
+        throw new Error('No valid actor selected.');
+      }
 
       const url = resolvedActor
         ? `${apiUrl('profile')}?actor=${encodeURIComponent(resolvedActor)}`
         : apiUrl('profile');
-      const json = await fetchJson(url);
+      const json = await fetchJson(url, { signal });
       state.profile.profile = json?.profile || null;
       state.profile.feed = json?.feed || [];
 
       state.profile.loading = false;
       state.profile.error = null;
     } catch (err) {
+      if (isAbortError(err)) return;
       state.profile.loading = false;
       state.profile.error = err?.message || String(err);
     }
@@ -905,17 +1296,18 @@ function renderApp(session, atproto) {
     paint();
   }
 
-  async function loadNotifications() {
+  async function loadNotifications(signal) {
     state.notifications.loading = true;
     state.notifications.error = null;
     paint();
 
     try {
-      const json = await fetchJson(`${apiUrl('notifications')}?limit=30`);
+      const json = await fetchJson(`${apiUrl('notifications')}?limit=30`, { signal });
       state.notifications.items = json?.items || [];
       state.notifications.loading = false;
       state.notifications.error = null;
     } catch (err) {
+      if (isAbortError(err)) return;
       state.notifications.loading = false;
       state.notifications.error = err?.message || String(err);
     }
@@ -925,40 +1317,91 @@ function renderApp(session, atproto) {
 
   let _routeLoadToken = 0;
   async function loadForCurrentRoute() {
+    if (_routeAbortController) {
+      try {
+        _routeAbortController.abort();
+      } catch {
+        // ignore
+      }
+    }
+    _routeAbortController = new AbortController();
+    const signal = _routeAbortController.signal;
+
     const token = ++_routeLoadToken;
     const route = parseRouteFromLocation();
     if (token !== _routeLoadToken) return;
 
     if (route.name === 'thread') {
-      await loadThread(route.uri);
+      await loadThread(route.uri, signal);
       return;
     }
     if (route.name === 'notifications') {
-      await loadNotifications();
+      await loadNotifications(signal);
       return;
     }
     if (route.name === 'profile') {
-      await loadProfile(route.actor);
+      await loadProfile(route.actor, signal);
       return;
     }
 
     if (route.name === 'media' || route.name === 'search') {
-      await loadTimeline();
+      if (route.name === 'search') {
+        await loadSearch(route.query || '', signal);
+        return;
+      }
+
+      await loadTimeline(signal);
       return;
     }
 
-    await loadTimeline();
+    await loadTimeline(signal);
+  }
+
+  function renderSearchBody(query) {
+    const q = (query || '').trim();
+    if (!q) {
+      return '<div class="panel panel-default"><div class="panel-body text-muted">Type a search query in the overlay search box (or use #search/&lt;query&gt;).</div></div>';
+    }
+
+    if (state.search.loading) {
+      return '<div class="panel panel-default"><div class="panel-body text-muted">Searching…</div></div>';
+    }
+    if (state.search.error) {
+      return `<div class="panel panel-default"><div class="panel-body">Search error: ${escapeHtml(String(state.search.error))}</div></div>`;
+    }
+
+    const items = Array.isArray(state.search.items) ? state.search.items : [];
+    if (!items.length) {
+      return '<div class="panel panel-default"><div class="panel-body text-muted">No results.</div></div>';
+    }
+
+    const prevItems = state.feed.items;
+    const prevLoading = state.feed.loading;
+    const prevError = state.feed.error;
+
+    state.feed.items = items;
+    state.feed.loading = false;
+    state.feed.error = null;
+
+    const html = renderFeedBody();
+
+    state.feed.items = prevItems;
+    state.feed.loading = prevLoading;
+    state.feed.error = prevError;
+
+    return html;
   }
 
   paint();
+  bindDelegatedHandlers();
   window.addEventListener('hashchange', () => {
-    paint();
     loadForCurrentRoute();
   });
   if (!window.location.hash) {
     setRoute({ name: 'feed' }, { replace: true });
   }
   loadForCurrentRoute();
+  loadLinkedAccounts();
 }
 
 async function fetchConcreteSession() {
@@ -1002,19 +1445,27 @@ async function main() {
             ? Math.floor(expiresAtRaw > 1e12 ? expiresAtRaw / 1000 : expiresAtRaw)
             : 0;
 
-        const upsertBody = {
-          did: String(tokenSet?.sub || oauthSession.did || ''),
-          handle: (localStorage.getItem(STORAGE_KEYS.lastHandle) || '').trim(),
-          issuer: String(tokenSet?.iss || ''),
-          pdsUrl: normalizeBaseUrl(tokenSet?.aud || ''),
-          appviewUrl: '',
-          scopes: String(tokenSet?.scope || ''),
-          refreshToken: String(tokenSet?.refresh_token || ''),
-          accessToken: String(tokenSet?.access_token || ''),
-          accessTokenExpiresAt: expiresAtSeconds,
-        };
+        const did = String(tokenSet?.sub || oauthSession.did || '').trim();
+        const handle = String(localStorage.getItem(STORAGE_KEYS.lastHandle) || '').trim();
+        const issuer = normalizeBaseUrl(tokenSet?.iss || oauthSession.issuer || resolver);
+        const pdsUrl = normalizeBaseUrl(tokenSet?.aud);
+        const scopes = String(tokenSet?.scope || '').trim();
+        const refreshToken = String(tokenSet?.refresh_token || tokenSet?.refreshToken || '').trim();
+        const accessToken = String(tokenSet?.access_token || tokenSet?.accessToken || '').trim();
 
-        if (upsertBody.did) {
+        if (did) {
+          const upsertBody = {
+            did,
+            handle,
+            issuer,
+            pdsUrl,
+            appviewUrl: '',
+            scopes,
+            refreshToken,
+            accessToken,
+            accessTokenExpiresAt: expiresAtSeconds,
+          };
+
           await fetch(apiUrl('accounts/upsert'), {
             method: 'POST',
             credentials: 'same-origin',

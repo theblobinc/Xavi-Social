@@ -63,3 +63,17 @@ This repo keeps a mirrored copy of the package under:
 - `live/public/packages/xavi_social/` (deployed mirror)
 
 When making changes that must affect runtime immediately, update both (or run whatever sync/deploy step your workflow uses).
+
+## Jetstream ingester (public Bluesky firehose)
+
+The Jetstream ingester is a small Node container that connects to a public Jetstream WebSocket and upserts public posts into Postgres (`xavi_social_cached_posts`) with `origin='jetstream'`.
+
+- Compose stack: `live/packages/xavi_social/docker/compose/jetstream/`
+- Helper script:
+  - `./live/public/packages/xavi_social/scripts/jetstream-ingester.sh up`
+  - `./live/public/packages/xavi_social/scripts/jetstream-ingester.sh health`
+
+End-to-end validation:
+- Ensure Postgres datastore is up (private docker network `ai_invest`).
+- Start the ingester, then confirm `/social/api/feed` returns cached items and a non-empty `cachedCursor`.
+- See `live/AI-Tests.md` → “Test 12 — Jetstream ingestion (public, no login)”.
