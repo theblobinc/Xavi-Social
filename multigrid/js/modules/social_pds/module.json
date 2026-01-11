@@ -1,0 +1,9 @@
+{
+  "name": "Social (PDS)",
+  "description": "Local PDS timeline/feed panels (no Vite/iframes)",
+  "dependencies": ["column_panels"],
+  "scripts": [
+    "timeline-panel.js",
+    "pds-panel.js"
+  ]
+}

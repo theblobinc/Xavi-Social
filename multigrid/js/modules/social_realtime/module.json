@@ -1,0 +1,8 @@
+{
+  "name": "Social (Realtime)",
+  "description": "Jetstream + Firehose panels (no Vite/iframes)",
+  "dependencies": ["column_panels"],
+  "scripts": [
+    "streams-panels.js"
+  ]
+}

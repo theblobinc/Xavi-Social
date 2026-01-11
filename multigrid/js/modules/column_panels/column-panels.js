@@ -361,6 +361,21 @@
             if (window.ZIndexManager) {
                 this.style.zIndex = String(window.ZIndexManager.getNextGridPanel());
             }
+
+            // Let the taskbar know this panel is focused/active.
+            try {
+                const panelId = this.panelId || this.getAttribute('panel-id') || '';
+                this.dispatchEvent(new CustomEvent('floating-panel-focus', {
+                    bubbles: true,
+                    composed: true,
+                    detail: {
+                        panelId,
+                        panelElement: this
+                    }
+                }));
+            } catch {
+                // ignore
+            }
         }
 
         onGridDragEnd(e) {

@@ -8,6 +8,7 @@
   ],
   "scripts": [
     "js/vendor/Sortable.min.js",
+    "js/components/social-streams.js",
     "column-panels.js"
   ],
   "components": [],

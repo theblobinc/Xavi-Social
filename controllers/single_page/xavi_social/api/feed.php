@@ -18,6 +18,11 @@ class Feed extends PageController
 {
     public function view(): void
     {
+        // Avoid holding the PHP session lock during potentially slow network / DB work.
+        if (function_exists('session_status') && session_status() === PHP_SESSION_ACTIVE) {
+            @session_write_close();
+        }
+
         $payload = $this->fetchLocalOrGlobalTimeline();
 
         // Only merge public cached posts into the non-user (public/global) feed.

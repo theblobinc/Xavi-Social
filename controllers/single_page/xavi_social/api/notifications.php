@@ -25,6 +25,11 @@ class Notifications extends PageController
             ], 401);
         }
 
+        // Avoid holding the PHP session lock during potentially slow network / DB work.
+        if (function_exists('session_status') && session_status() === PHP_SESSION_ACTIVE) {
+            @session_write_close();
+        }
+
         $limit = (int) $this->request->query->get('limit', 30);
         if ($limit <= 0) {
             $limit = 30;

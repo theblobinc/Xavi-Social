@@ -265,7 +265,7 @@
                 title: 'Timeline',
                 colStart: 1,
                 colSpan: 2,
-                // The social module registers its own taskbar entry; avoid duplicates.
+                // This module registers its own taskbar entry; avoid duplicates.
                 registerInTaskbar: false,
                 buildContent: () => {
                     const el = document.createElement('xavi-social-stream');

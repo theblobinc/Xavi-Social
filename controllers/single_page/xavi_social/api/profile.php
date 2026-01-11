@@ -25,6 +25,11 @@ class Profile extends PageController
             ], 401);
         }
 
+        // Avoid holding the PHP session lock during potentially slow network / DB work.
+        if (function_exists('session_status') && session_status() === PHP_SESSION_ACTIVE) {
+            @session_write_close();
+        }
+
         $actor = trim((string) $this->request->query->get('actor', ''));
 
         $userId = (int) $user->getUserID();

@@ -146,7 +146,15 @@
       title,
       colStart: 0,
       colSpan: 1,
+      // This module registers taskbar entries; avoid duplicates from column_panels.
+      registerInTaskbar: false,
       buildContent: () => {
+        if (customElements.get('xavi-social-stream')) {
+          const el = document.createElement('xavi-social-stream');
+          el.setAttribute('stream', stream);
+          return el;
+        }
+
         const el = document.createElement('xavi-social-stream-frame');
         el.setAttribute('stream', stream);
         return el;

@@ -29,6 +29,11 @@ class Post extends PageController
             ], 401);
         }
 
+        // Avoid holding the PHP session lock during potentially slow network / DB work.
+        if (function_exists('session_status') && session_status() === PHP_SESSION_ACTIVE) {
+            @session_write_close();
+        }
+
         $raw = (string) $this->request->getContent();
         // In some Concrete/Symfony setups, the request content can appear empty if
         // php://input has been consumed earlier in the lifecycle. Fall back to

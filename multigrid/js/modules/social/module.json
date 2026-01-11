@@ -7,10 +7,7 @@
     "utils",
     "column_panels"
   ],
-  "scripts": [
-    "timeline-panel.js",
-    "streams-panels.js"
-  ],
+  "scripts": [],
   "components": [],
   "exports": {}
 }
