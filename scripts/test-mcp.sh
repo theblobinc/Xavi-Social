@@ -8,6 +8,26 @@ CURL_CONNECT_TIMEOUT="${CURL_CONNECT_TIMEOUT:-5}"
 CURL_MAX_TIME="${CURL_MAX_TIME:-20}"
 CURL_TIMEOUT_ARGS=(--connect-timeout "${CURL_CONNECT_TIMEOUT}" --max-time "${CURL_MAX_TIME}")
 
+# Optional network overrides (useful for no-hairpin NAT / vhost routing)
+# - CURL_RESOLVE: whitespace-separated list of entries like "host:port:ip" (passed to curl --resolve)
+# - CURL_HOST_HEADER: sets an explicit Host header for HTTP requests
+CURL_RESOLVE="${CURL_RESOLVE:-}"
+CURL_HOST_HEADER="${CURL_HOST_HEADER:-}"
+CURL_EXTRA_ARGS=()
+
+if [[ -n "${CURL_RESOLVE}" ]]; then
+  read -ra _RESOLVE_ENTRIES <<<"${CURL_RESOLVE}"
+  for _entry in "${_RESOLVE_ENTRIES[@]}"; do
+    if [[ -n "${_entry}" ]]; then
+      CURL_EXTRA_ARGS+=(--resolve "${_entry}")
+    fi
+  done
+fi
+
+if [[ -n "${CURL_HOST_HEADER}" ]]; then
+  CURL_EXTRA_ARGS+=(-H "Host: ${CURL_HOST_HEADER}")
+fi
+
 BASE_URL_DEFAULT="http://localhost"
 BASE_URL_ARG="${1:-}"  # optional
 
@@ -35,6 +55,7 @@ if command -v curl >/dev/null 2>&1; then
   echo "== /api/session ==" >&2
   curl -sS -D - \
     "${CURL_TIMEOUT_ARGS[@]}" \
+    "${CURL_EXTRA_ARGS[@]}" \
     -H "Accept: application/json" \
     "${SESSION_URL}" || true
   echo >&2
@@ -94,6 +115,7 @@ if [[ -n "${SECRET}" ]]; then
   trap 'rm -f "${BODY_FILE}"' EXIT
   curl -sS -D - -o "${BODY_FILE}" \
     "${CURL_TIMEOUT_ARGS[@]}" \
+    "${CURL_EXTRA_ARGS[@]}" \
     -H "Accept: application/json" \
     "${JWT_URL}" || true
 

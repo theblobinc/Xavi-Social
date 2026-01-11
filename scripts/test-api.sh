@@ -8,6 +8,26 @@ CURL_CONNECT_TIMEOUT="${CURL_CONNECT_TIMEOUT:-5}"
 CURL_MAX_TIME="${CURL_MAX_TIME:-20}"
 CURL_TIMEOUT_ARGS=(--connect-timeout "${CURL_CONNECT_TIMEOUT}" --max-time "${CURL_MAX_TIME}")
 
+# Optional network overrides (useful for no-hairpin NAT / vhost routing)
+# - CURL_RESOLVE: whitespace-separated list of entries like "host:port:ip" (passed to curl --resolve)
+# - CURL_HOST_HEADER: sets an explicit Host header for HTTP requests
+CURL_RESOLVE="${CURL_RESOLVE:-}"
+CURL_HOST_HEADER="${CURL_HOST_HEADER:-}"
+CURL_EXTRA_ARGS=()
+
+if [[ -n "${CURL_RESOLVE}" ]]; then
+  read -ra _RESOLVE_ENTRIES <<<"${CURL_RESOLVE}"
+  for _entry in "${_RESOLVE_ENTRIES[@]}"; do
+    if [[ -n "${_entry}" ]]; then
+      CURL_EXTRA_ARGS+=(--resolve "${_entry}")
+    fi
+  done
+fi
+
+if [[ -n "${CURL_HOST_HEADER}" ]]; then
+  CURL_EXTRA_ARGS+=(-H "Host: ${CURL_HOST_HEADER}")
+fi
+
 # Usage:
 #   ./public/packages/xavi_social/scripts/test-api.sh <JWT> [BASE_URL]
 # or:
@@ -92,6 +112,7 @@ if [[ -z "$JWT" ]]; then
 else
   curl -sS -D - \
     "${CURL_TIMEOUT_ARGS[@]}" \
+    "${CURL_EXTRA_ARGS[@]}" \
     -H "Accept: application/json" \
     -H "Authorization: Bearer ${JWT}" \
     "${ME_URL}"
@@ -105,6 +126,7 @@ if [[ -z "$JWT" ]]; then
 else
   curl -sS -D - \
     "${CURL_TIMEOUT_ARGS[@]}" \
+    "${CURL_EXTRA_ARGS[@]}" \
     -H "Accept: application/json" \
     -H "Authorization: Bearer ${JWT}" \
     "${DEBUG_URL}"
@@ -122,6 +144,7 @@ trap 'rm -f "${FEED_HEADERS_FILE}" "${FEED_BODY_FILE}" "${POST_HEADERS_FILE}" "$
 if [[ -z "$JWT" ]]; then
   curl -sS -D "${FEED_HEADERS_FILE}" -o "${FEED_BODY_FILE}" \
     "${CURL_TIMEOUT_ARGS[@]}" \
+    "${CURL_EXTRA_ARGS[@]}" \
     -G \
     -H "Accept: application/json" \
     --data-urlencode "limit=${TEST_FEED_LIMIT}" \
@@ -129,6 +152,7 @@ if [[ -z "$JWT" ]]; then
 else
   curl -sS -D "${FEED_HEADERS_FILE}" -o "${FEED_BODY_FILE}" \
     "${CURL_TIMEOUT_ARGS[@]}" \
+    "${CURL_EXTRA_ARGS[@]}" \
     -G \
     -H "Accept: application/json" \
     -H "Authorization: Bearer ${JWT}" \
@@ -173,6 +197,7 @@ else
   POST_TEXT="test post $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   curl -sS -D "${POST_HEADERS_FILE}" -o "${POST_BODY_FILE}" \
     "${CURL_TIMEOUT_ARGS[@]}" \
+    "${CURL_EXTRA_ARGS[@]}" \
     -H "Accept: application/json" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer ${JWT}" \
@@ -212,6 +237,7 @@ elif [[ -z "$JWT" ]]; then
 else
   curl -sS -D - \
     "${CURL_TIMEOUT_ARGS[@]}" \
+    "${CURL_EXTRA_ARGS[@]}" \
     -G \
     -H "Accept: application/json" \
     -H "Authorization: Bearer ${JWT}" \
