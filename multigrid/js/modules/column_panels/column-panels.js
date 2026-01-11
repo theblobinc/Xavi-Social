@@ -36,6 +36,19 @@
         return host.getBoundingClientRect();
     }
 
+    function getColsMax(explicitWorkspace = null) {
+        const colW = getColumnWidth(explicitWorkspace);
+        const rect = getWorkspaceRect(explicitWorkspace);
+        return rect ? Math.max(1, Math.floor(rect.width / colW)) : 12;
+    }
+
+    function getResponsiveDefaultSpan(colsMax) {
+        // Responsive breakpoint based on 350px columns:
+        // If the workspace can display 4+ columns, default to 2-column panels.
+        // Otherwise, default to 1 to avoid unavoidable overlaps.
+        return colsMax >= 4 ? 2 : 1;
+    }
+
     function ensureFloatingLayer(workspace) {
         const ws = getWorkspace(workspace);
         if (!ws || !ws.shadowRoot) return null;
@@ -359,6 +372,8 @@
         onGridResizeEnd(e) {
             const id = this.panelId;
             if (!id || !window.XaviColumnPanels) return;
+            // Manual resize implies the user is overriding responsive spans.
+            this.setAttribute('responsive', 'false');
             window.XaviColumnPanels._normalizeFromElement(id, this);
         }
 
@@ -388,11 +403,13 @@
                 return;
             }
             if (action === 'grow') {
+                this.setAttribute('responsive', 'false');
                 this.colSpan = clamp(this.colSpan + 1, 1, colsMax);
                 window.XaviColumnPanels?._applyGeometry(id);
                 return;
             }
             if (action === 'shrink') {
+                this.setAttribute('responsive', 'false');
                 this.colSpan = clamp(this.colSpan - 1, 1, colsMax);
                 window.XaviColumnPanels?._applyGeometry(id);
                 return;
@@ -407,6 +424,446 @@
     const manager = {
         panels: new Map(),
         _settingsOpen: false,
+        _managerPanelId: 'column-panels-manager',
+        _workspace: null,
+        _resizeObserver: null,
+        _resizeRaf: 0,
+
+        _dispatchPanelsChanged() {
+            try {
+                window.dispatchEvent(new CustomEvent('xavi-column-panels-changed'));
+            } catch {
+                // ignore
+            }
+        },
+
+        _scheduleLayout() {
+            if (this._resizeRaf) return;
+            this._resizeRaf = window.requestAnimationFrame(() => {
+                this._resizeRaf = 0;
+                this._applyResponsiveLayout();
+            });
+        },
+
+        _bindWorkspace(workspace) {
+            this._workspace = workspace || null;
+
+            if (this._resizeObserver) {
+                try { this._resizeObserver.disconnect(); } catch { /* ignore */ }
+                this._resizeObserver = null;
+            }
+
+            const ws = workspace || null;
+            const host = ws?.shadowRoot?.host || ws;
+            if (typeof ResizeObserver === 'function' && host) {
+                this._resizeObserver = new ResizeObserver(() => this._scheduleLayout());
+                try { this._resizeObserver.observe(host); } catch { /* ignore */ }
+            } else {
+                window.addEventListener('resize', () => this._scheduleLayout());
+            }
+        },
+
+        _getVisiblePanelsSnapshot(excludeId = null) {
+            const out = [];
+            for (const [id, entry] of this.panels.entries()) {
+                if (excludeId && id === excludeId) continue;
+                const el = entry?.element;
+                if (!el || el.hidden || el.style.display === 'none') continue;
+
+                // Prefer real on-screen geometry so placement works even if a panel's
+                // saved GridObject state doesn't match its current col-span attribute.
+                let start = Number(el.colStart) || 0;
+                let span = Math.max(1, Number(el.colSpan) || 1);
+                let end = start + span - 1;
+
+                try {
+                    const wsRef = this._workspace || entry?.openOptions?.workspace || null;
+                    const colW = getColumnWidth(wsRef);
+                    const ws = getWorkspaceRect(wsRef);
+                    if (ws && Number.isFinite(ws.width) && ws.width > 0 && Number.isFinite(colW) && colW > 0) {
+                        const colsMax = Math.max(1, Math.floor(ws.width / colW));
+                        const r = el.getBoundingClientRect();
+                        const leftRel = r.left - ws.left;
+                        const rightRel = leftRel + r.width;
+
+                        const measuredStart = clamp(Math.floor(leftRel / colW), 0, Math.max(0, colsMax - 1));
+                        const measuredEnd = clamp(Math.ceil(rightRel / colW) - 1, measuredStart, Math.max(0, colsMax - 1));
+                        const measuredSpan = Math.max(1, measuredEnd - measuredStart + 1);
+
+                        start = measuredStart;
+                        end = measuredEnd;
+                        span = measuredSpan;
+
+                        // Keep attributes/state in sync with the actual geometry.
+                        if ((Number(el.colStart) || 0) !== measuredStart || (Number(el.colSpan) || 1) !== measuredSpan) {
+                            el.colStart = measuredStart;
+                            el.colSpan = measuredSpan;
+                            const prev = this.panels.get(id);
+                            if (prev) {
+                                this.panels.set(id, { ...prev, colStart: measuredStart, colSpan: measuredSpan });
+                            }
+                        }
+                    }
+                } catch {
+                    // ignore
+                }
+
+                out.push({ id, el, start, span, end });
+            }
+            return out;
+        },
+
+        _findFirstFitStart(occupied, span, colsMax) {
+            const maxStart = Math.max(0, colsMax - span);
+            for (let start = 0; start <= maxStart; start += 1) {
+                const end = start + span - 1;
+                let ok = true;
+                for (let i = 0; i < occupied.length; i += 1) {
+                    const o = occupied[i];
+                    if (rangeIntersects(start, end, o.start, o.end)) {
+                        ok = false;
+                        break;
+                    }
+                }
+                if (ok) return start;
+            }
+            return null;
+        },
+
+        _applyResponsiveLayout() {
+            const workspace = this._workspace || null;
+            const colW = getColumnWidth(workspace);
+            const rect = getWorkspaceRect(workspace);
+            if (!rect) return;
+
+            const colsMax = Math.max(1, Math.floor(rect.width / colW));
+            const defaultSpan = getResponsiveDefaultSpan(colsMax);
+
+            // Reflow visible panels left-to-right to avoid overlap, and shrink spans
+            // automatically when the workspace becomes too narrow.
+            const visible = this._getVisiblePanelsSnapshot();
+            const occupied = [];
+
+            // Preserve insertion order (Map order) for stability.
+            for (const [id, entry] of this.panels.entries()) {
+                const el = entry?.element;
+                if (!el || el.hidden || el.style.display === 'none') continue;
+
+                const responsive = el.getAttribute('responsive') !== 'false';
+                const currentSpan = clamp(Number(el.colSpan) || 1, 1, colsMax);
+                // Responsive panels always track the current breakpoint (e.g. 2 columns when wide enough,
+                // 1 column when narrow). Manual resizing disables responsiveness.
+                let span = responsive ? clamp(defaultSpan, 1, colsMax) : currentSpan;
+
+                let fitStart = this._findFirstFitStart(occupied, span, colsMax);
+                if (fitStart === null && span > 1) {
+                    // If a 2-col panel can't fit, fall back to 1-col placement.
+                    span = 1;
+                    fitStart = this._findFirstFitStart(occupied, span, colsMax);
+                }
+
+                const start = fitStart === null
+                    ? clamp(Number(el.colStart) || 0, 0, Math.max(0, colsMax - span))
+                    : fitStart;
+
+                el.colSpan = span;
+                el.colStart = start;
+                occupied.push({ start, end: start + span - 1 });
+                this.panels.set(id, { ...entry, colStart: start, colSpan: span });
+                this._applyGeometry(id);
+            }
+        },
+
+        reorderPanels(panelIds = []) {
+            const order = Array.isArray(panelIds) ? panelIds.filter(Boolean) : [];
+            if (!order.length) return;
+
+            // Keep the manager panel pinned (if present), then apply user order to the rest.
+            const next = new Map();
+            if (this.panels.has(this._managerPanelId)) {
+                next.set(this._managerPanelId, this.panels.get(this._managerPanelId));
+            }
+
+            for (const id of order) {
+                if (id === this._managerPanelId) continue;
+                const entry = this.panels.get(id);
+                if (entry) next.set(id, entry);
+            }
+
+            for (const [id, entry] of this.panels.entries()) {
+                if (next.has(id)) continue;
+                next.set(id, entry);
+            }
+
+            this.panels = next;
+            this._scheduleLayout();
+            this._dispatchPanelsChanged();
+        },
+
+        openPanelsManager(options = {}) {
+            const id = this._managerPanelId;
+            const title = options.title || 'Panels';
+
+            const buildContent = () => {
+                const root = document.createElement('div');
+                root.style.height = '100%';
+                root.style.display = 'flex';
+                root.style.flexDirection = 'column';
+                root.style.padding = '10px';
+                root.style.gap = '10px';
+
+                const header = document.createElement('div');
+                header.style.display = 'flex';
+                header.style.alignItems = 'center';
+                header.style.justifyContent = 'space-between';
+                header.style.gap = '8px';
+
+                const h = document.createElement('div');
+                h.textContent = 'Workspace Panels';
+                h.style.fontWeight = '600';
+                h.style.fontSize = '13px';
+                header.appendChild(h);
+
+                const refreshBtn = document.createElement('button');
+                refreshBtn.textContent = 'Refresh';
+                refreshBtn.style.cursor = 'pointer';
+                refreshBtn.style.border = '0';
+                refreshBtn.style.borderRadius = '6px';
+                refreshBtn.style.padding = '6px 10px';
+                refreshBtn.style.background = 'rgba(255,255,255,0.10)';
+                refreshBtn.style.color = 'rgba(255,255,255,0.92)';
+                header.appendChild(refreshBtn);
+
+                const list = document.createElement('div');
+                list.style.display = 'flex';
+                list.style.flexDirection = 'column';
+                list.style.gap = '6px';
+                list.style.overflow = 'auto';
+                list.style.minHeight = '0';
+
+                const render = () => {
+                    list.innerHTML = '';
+
+                    for (const [pid, entry] of this.panels.entries()) {
+                        if (pid === id) continue;
+                        const el = entry?.element || null;
+                        if (!el) continue;
+
+                        const row = document.createElement('div');
+                        row.setAttribute('data-panel-id', pid);
+                        row.style.display = 'flex';
+                        row.style.alignItems = 'center';
+                        row.style.justifyContent = 'space-between';
+                        row.style.gap = '8px';
+                        row.style.padding = '8px';
+                        row.style.border = '1px solid rgba(255,255,255,0.10)';
+                        row.style.borderRadius = '8px';
+                        row.style.background = 'rgba(255,255,255,0.06)';
+
+                        const left = document.createElement('div');
+                        left.style.display = 'flex';
+                        left.style.alignItems = 'center';
+                        left.style.gap = '8px';
+                        left.style.minWidth = '0';
+
+                        const drag = document.createElement('span');
+                        drag.textContent = '⋮⋮';
+                        drag.title = 'Drag to reorder';
+                        drag.style.cursor = 'grab';
+                        drag.style.userSelect = 'none';
+                        drag.style.opacity = '0.85';
+                        drag.className = 'drag-handle';
+                        left.appendChild(drag);
+
+                        const label = document.createElement('div');
+                        label.textContent = el.getAttribute('title') || pid;
+                        label.style.whiteSpace = 'nowrap';
+                        label.style.overflow = 'hidden';
+                        label.style.textOverflow = 'ellipsis';
+                        label.style.fontSize = '13px';
+                        left.appendChild(label);
+
+                        const right = document.createElement('div');
+                        right.style.display = 'inline-flex';
+                        right.style.gap = '6px';
+
+                        const showHide = document.createElement('button');
+                        const isHidden = el.hidden || el.style.display === 'none';
+                        showHide.textContent = isHidden ? 'Show' : 'Hide';
+                        showHide.style.cursor = 'pointer';
+                        showHide.style.border = '0';
+                        showHide.style.borderRadius = '6px';
+                        showHide.style.padding = '6px 10px';
+                        showHide.style.background = 'rgba(255,255,255,0.10)';
+                        showHide.style.color = 'rgba(255,255,255,0.92)';
+                        showHide.addEventListener('click', () => {
+                            if (el.hidden || el.style.display === 'none') {
+                                el.hidden = false;
+                                el.style.display = 'block';
+                                el.bringToFront?.();
+                            } else {
+                                el.hidden = true;
+                                el.style.display = 'none';
+                            }
+                            this._scheduleLayout();
+                            this._dispatchPanelsChanged();
+                        });
+                        right.appendChild(showHide);
+
+                        const focus = document.createElement('button');
+                        focus.textContent = 'Focus';
+                        focus.style.cursor = 'pointer';
+                        focus.style.border = '0';
+                        focus.style.borderRadius = '6px';
+                        focus.style.padding = '6px 10px';
+                        focus.style.background = 'rgba(255,255,255,0.10)';
+                        focus.style.color = 'rgba(255,255,255,0.92)';
+                        focus.addEventListener('click', () => {
+                            el.hidden = false;
+                            el.style.display = 'block';
+                            el.bringToFront?.();
+                        });
+                        right.appendChild(focus);
+
+                        const close = document.createElement('button');
+                        close.textContent = '×';
+                        close.title = 'Close';
+                        close.style.cursor = 'pointer';
+                        close.style.border = '0';
+                        close.style.borderRadius = '6px';
+                        close.style.padding = '6px 10px';
+                        close.style.background = 'rgba(255,255,255,0.12)';
+                        close.style.color = 'rgba(255,255,255,0.92)';
+                        close.addEventListener('click', () => {
+                            el.hidden = true;
+                            el.style.display = 'none';
+                            this._scheduleLayout();
+                            this._dispatchPanelsChanged();
+                        });
+                        right.appendChild(close);
+
+                        row.appendChild(left);
+                        row.appendChild(right);
+                        list.appendChild(row);
+                    }
+
+                    // Initialize Sortable (MIT) if present.
+                    if (window.Sortable && typeof window.Sortable.create === 'function') {
+                        try {
+                            window.Sortable.create(list, {
+                                animation: 150,
+                                handle: '.drag-handle',
+                                ghostClass: 'sortable-ghost',
+                                onEnd: () => {
+                                    const ids = Array.from(list.querySelectorAll('[data-panel-id]'))
+                                        .map((n) => n.getAttribute('data-panel-id'))
+                                        .filter(Boolean);
+                                    this.reorderPanels(ids);
+                                }
+                            });
+                        } catch {
+                            // ignore
+                        }
+                    }
+                };
+
+                refreshBtn.addEventListener('click', () => render());
+                window.addEventListener('xavi-column-panels-changed', () => render());
+
+                root.appendChild(header);
+                root.appendChild(list);
+                requestAnimationFrame(() => render());
+                return root;
+            };
+
+            return this.openPanel({
+                ...options,
+                id,
+                title,
+                category: options.category || 'Workspace',
+                priority: Number.isFinite(options.priority) ? options.priority : 30,
+                icon: options.icon || '🧩',
+                responsive: true,
+                buildContent
+            });
+        },
+
+        _registerTaskbarEntry(id, title, options = {}) {
+            if (!id) return;
+            if (options.registerInTaskbar === false) return;
+
+            const taskbarId = `column-panel:${id}`;
+            if (this._taskbarRegistered?.has(taskbarId)) return;
+            if (!this._taskbarRegistered) this._taskbarRegistered = new Set();
+
+            const icon = options.icon || '🪟';
+            const category = options.category || 'Workspace';
+            const priority = Number.isFinite(options.priority) ? options.priority : 50;
+
+            const launch = (context = {}) => {
+                const existing = this.panels.get(id)?.element || null;
+                if (existing) {
+                    existing.hidden = false;
+                    existing.style.display = 'block';
+                    existing.bringToFront?.();
+                    return existing;
+                }
+                return this.openPanel({ ...options, id, title });
+            };
+
+            const register = () => {
+                if (typeof window.registerTaskbarPanel !== 'function') return false;
+                try {
+                    window.registerTaskbarPanel({
+                        id: taskbarId,
+                        label: title || id,
+                        icon,
+                        category,
+                        priority,
+                        requiresAdmin: false,
+                        maxInstances: 1,
+                        launch
+                    });
+                    this._taskbarRegistered.add(taskbarId);
+                    return true;
+                } catch {
+                    return false;
+                }
+            };
+
+            if (register()) return;
+            window.addEventListener('xavi-panel-registry-ready', () => register(), { once: true });
+        },
+
+        _registerPanelsManagerTaskbarEntry() {
+            const id = this._managerPanelId;
+            const taskbarId = `column-panel:${id}`;
+            if (this._taskbarRegistered?.has(taskbarId)) return;
+            if (!this._taskbarRegistered) this._taskbarRegistered = new Set();
+
+            const register = () => {
+                if (typeof window.registerTaskbarPanel !== 'function') return false;
+                try {
+                    window.registerTaskbarPanel({
+                        id: taskbarId,
+                        label: 'Panels',
+                        icon: '🧩',
+                        category: 'Workspace',
+                        priority: 29,
+                        requiresAdmin: false,
+                        maxInstances: 1,
+                        launch: () => this.openPanelsManager()
+                    });
+                    this._taskbarRegistered.add(taskbarId);
+                    return true;
+                } catch {
+                    return false;
+                }
+            };
+
+            if (register()) return;
+            window.addEventListener('xavi-panel-registry-ready', () => register(), { once: true });
+        },
 
         openPanel(options = {}) {
             const { id, title, buildContent = null } = options;
@@ -429,23 +886,36 @@
                 return existing.element;
             }
 
-            const colW = getColumnWidth(options.workspace || null);
-            const rect = getWorkspaceRect(options.workspace || null);
-            const colsMax = rect ? Math.max(1, Math.floor(rect.width / colW)) : 12;
+            const workspace = options.workspace || null;
+            const colsMax = getColsMax(workspace);
+            const responsive = options.responsive !== false;
 
-            const defaultSpan = colsMax >= 5 ? 2 : 1;
+            const defaultSpan = responsive ? getResponsiveDefaultSpan(colsMax) : 1;
             const requestedSpan = (options.colSpan === 0 || options.colSpan) ? Number(options.colSpan) : defaultSpan;
-            const colSpan = clamp(requestedSpan || 1, 1, colsMax);
+            let colSpan = clamp(requestedSpan || 1, 1, colsMax);
 
-            const defaultStart = colsMax >= 5 ? 3 : 1;
-            const requestedStart = (options.colStart === 0 || options.colStart) ? Number(options.colStart) : defaultStart;
-            const colStart = clamp(requestedStart || 0, 0, Math.max(0, colsMax - colSpan));
+            let colStart = null;
+            const hasRequestedStart = (options.colStart === 0 || options.colStart);
+            if (hasRequestedStart) {
+                const requestedStart = Number(options.colStart) || 0;
+                colStart = clamp(requestedStart, 0, Math.max(0, colsMax - colSpan));
+            } else {
+                const occupied = this._getVisiblePanelsSnapshot(id).map((p) => ({ start: p.start, end: p.end }));
+                let fit = this._findFirstFitStart(occupied, colSpan, colsMax);
+                if (fit === null && colSpan > 1) {
+                    // If a 2-col panel can't fit, fall back to 1-col placement.
+                    colSpan = 1;
+                    fit = this._findFirstFitStart(occupied, colSpan, colsMax);
+                }
+                colStart = fit === null ? 0 : fit;
+            }
 
             const el = document.createElement('xavi-column-panel');
             el.setAttribute('panel-id', id);
             el.setAttribute('title', title || id);
             el.setAttribute('col-start', String(colStart));
             el.setAttribute('col-span', String(colSpan));
+            el.setAttribute('responsive', responsive ? 'true' : 'false');
 
             if (typeof buildContent === 'function') {
                 try {
@@ -463,7 +933,19 @@
                 id,
                 element: el,
                 colStart,
-                colSpan
+                colSpan,
+                openOptions: options
+            });
+
+            this._dispatchPanelsChanged();
+
+            // Allow the taskbar to re-open/show this panel later.
+            this._registerTaskbarEntry(id, title || id, options);
+
+            el.addEventListener('panel-closed', () => {
+                // Keep the entry so it can be re-opened; just reflow remaining panels.
+                this._scheduleLayout();
+                this._dispatchPanelsChanged();
             });
 
             // Normalize once connected.
@@ -488,6 +970,7 @@
                     title: 'Settings',
                     colStart: 0,
                     colSpan: 1,
+                    responsive: false,
                     buildContent: () => {
                         const wrap = document.createElement('div');
                         wrap.style.width = '100%';
@@ -600,6 +1083,7 @@
     };
 
     window.XaviColumnPanels = manager;
+    manager._registerPanelsManagerTaskbarEntry();
 
     document.addEventListener('xavi-workspace-ready', (e) => {
         // Ensure the taskbar start menu picks up the column width.
@@ -611,6 +1095,11 @@
                 // ignore
             }
         }
+
+        // Bind resize handling for responsive panel layout.
+        manager._bindWorkspace(workspace);
+        manager._scheduleLayout();
+
         window.dispatchEvent(new CustomEvent('xavi-column-panels-ready', { detail: { manager } }));
     }, { once: true });
 })();

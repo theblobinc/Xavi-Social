@@ -2874,10 +2874,25 @@ class Taskbar extends HTMLElement {
         const taskbarRect = taskbar.getBoundingClientRect();
         const taskbarHeight = Math.round(taskbarRect.height);
         const bottomOffset = taskbarHeight + 6; // 6px gap above taskbar
+
+        // For overlays that should align to the workspace surface.
+        const workspaceHost = this.workspace?.shadowRoot?.host || this.workspace || null;
+        const workspaceRect = workspaceHost?.getBoundingClientRect?.() || null;
+        const taskbarTop = Number.isFinite(taskbarRect.top) ? Math.round(taskbarRect.top) : null;
+        const startMenuBottom = (taskbarTop !== null)
+            ? Math.max(0, Math.round(window.innerHeight - taskbarTop))
+            : bottomOffset;
         
         // Update menus
         if (this.startMenu) {
-            this.startMenu.style.bottom = `${bottomOffset}px`;
+            // Start menu should behave like a 1-column overlay over the workspace.
+            this.startMenu.style.bottom = `${startMenuBottom}px`;
+            if (workspaceRect) {
+                this.startMenu.style.left = `${Math.round(workspaceRect.left)}px`;
+                this.startMenu.style.top = `${Math.round(workspaceRect.top)}px`;
+            } else {
+                this.startMenu.style.top = '0px';
+            }
         }
         if (this.calendarMenu) {
             this.calendarMenu.style.bottom = `${bottomOffset}px`;
