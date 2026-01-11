@@ -70,7 +70,7 @@ Practical recommendation
 
 Phase 1: Support “Login with ATProto” (OAuth) for existing accounts everywhere.
 
-Phase 2 (optional): If you run your own PDS (or partner with one), add “Create account” against that PDS (call describeServer → show form → call createAccount).
+Phase 2: If you run your own PDS (or partner with one), add “Create account” against that PDS (call describeServer → show form → call createAccount).
 
 That’s the only honest way to say “signup” while still supporting “all ATProto users.”
 
@@ -106,4 +106,4 @@ There is a minimal backend datastore compose in `packages/xavi_social/docker/` (
 
 Public ingestion (Jetstream)
 
-Optionally, a small Jetstream ingester service can consume the public Bluesky firehose and write public posts into Postgres (`xavi_social_cached_posts`). This supports the scalable “public merged feed” path without requiring a logged-in ATProto session.
+The Jetstream ingester service can consume the public Bluesky firehose and write public posts into Postgres (`xavi_social_cached_posts`). This supports the scalable “public merged feed” path without requiring a logged-in ATProto session.

@@ -20,9 +20,9 @@ echo ">> Started: datastore"
 
 echo ">> Started: pds"
 
-if [[ "${XAVI_SOCIAL_ENABLE_JETSTREAM:-0}" == "1" ]]; then
+if [[ "${XAVI_SOCIAL_ENABLE_JETSTREAM:-1}" == "1" ]]; then
   ( cd "$COMPOSE_DIR/jetstream" && $COMPOSE_CMD up -d --build )
   echo ">> Started: jetstream"
 else
-  echo ">> Skipped: jetstream (set XAVI_SOCIAL_ENABLE_JETSTREAM=1 to enable)"
+  echo ">> Skipped: jetstream (set XAVI_SOCIAL_ENABLE_JETSTREAM=0 to disable)"
 fi

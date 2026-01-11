@@ -59,13 +59,12 @@ class Jwt extends PageController
 
     private function getJwtSecret(): string
     {
-        $secret = (string) Config::get('xavi_social.jwt_secret');
-        if ($secret !== '') {
-            return $secret;
+        $env = getenv('XAVI_SOCIAL_JWT_SECRET');
+        if ($env !== false && (string) $env !== '') {
+            return (string) $env;
         }
 
-        $env = getenv('XAVI_SOCIAL_JWT_SECRET');
-        return $env === false ? '' : (string) $env;
+        return (string) Config::get('xavi_social.jwt_secret');
     }
 
     private function jwtEncodeHs256(array $payload, string $secret): string

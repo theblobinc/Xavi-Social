@@ -35,6 +35,33 @@ class Thread extends PageController
 
         $userId = (int) $user->getUserID();
 
+        // Prefer an AppView host first.
+        // The feed may include cached public posts that do not exist in the local PDS, so attempting
+        // to fetch a thread from the local PDS can yield "Could not locate record".
+        $appviewHosts = [];
+        $configuredAppviewHost = $this->getAtprotoAppviewHost();
+        if ($configuredAppviewHost !== '') {
+            $appviewHosts[] = $configuredAppviewHost;
+        } elseif ($this->shouldUsePublicAppviewFallback()) {
+            $appviewHosts[] = $this->getPublicAppviewFallbackHost();
+        }
+
+        foreach ($appviewHosts as $appviewHost) {
+            $globalOut = $this->fetchThreadPublic($appviewHost, $uri);
+            if (($globalOut['ok'] ?? false) === true) {
+                $this->sendJson([
+                    'ok' => true,
+                    'source' => 'atproto',
+                    'mode' => 'appview_public',
+                    'authMethod' => $authMethod,
+                    'viewerDid' => null,
+                    'uri' => $uri,
+                    'post' => $globalOut['post'] ?? null,
+                    'replies' => $globalOut['replies'] ?? [],
+                ]);
+            }
+        }
+
         $localAccount = $this->getLocalPdsAccountRow($userId);
         if (!is_array($localAccount)) {
             try {
@@ -165,12 +192,6 @@ class Thread extends PageController
 
         if ($status === 404 || ($status === 400 && is_array($json) && $this->isXrpcMethodNotSupported($json))) {
             // Pure PDS setups typically don't have an AppView; build a minimal thread from the record.
-            return $this->fetchThreadFromRecord($origin, $accessJwt, $uri);
-        }
-
-        if ($status === 400 && is_array($json) && $this->isRecordMissing($json)) {
-            // Some PDS builds return InvalidRequest/"Could not locate record" instead of 404 when the
-            // AppView side is absent. Fall back to a repo.getRecord fetch in that case as well.
             return $this->fetchThreadFromRecord($origin, $accessJwt, $uri);
         }
 
@@ -361,20 +382,123 @@ class Thread extends PageController
         return false;
     }
 
-    private function isRecordMissing(array $json): bool
+    /**
+     * @return array{ok: bool, status: int, post?: array<string,mixed>|null, replies?: array<int,array<string,mixed>>, error?: string, message?: string, raw?: string}
+     */
+    private function fetchThreadPublic(string $xrpcHost, string $uri): array
     {
-        $err = strtolower(trim((string) ($json['error'] ?? '')));
-        $msg = strtolower(trim((string) ($json['message'] ?? '')));
+        $client = $this->makeHttpClient();
 
-        if ($msg !== '' && (str_contains($msg, 'could not locate record') || str_contains($msg, 'record not found'))) {
+        try {
+            $resp = $client->get(rtrim($xrpcHost, '/') . '/xrpc/app.bsky.feed.getPostThread', [
+                'headers' => [
+                    'Accept' => 'application/json',
+                ],
+                'query' => [
+                    'uri' => $uri,
+                    'depth' => 1,
+                    'parentHeight' => 0,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'status' => 502, 'error' => 'upstream_unreachable', 'message' => 'Failed to connect to configured XRPC host.'];
+        }
+
+        $status = $resp->getStatusCode();
+        $raw = (string) $resp->getBody();
+        $json = json_decode($raw, true);
+
+        if ($status < 200 || $status >= 300 || !is_array($json)) {
+            $err = is_array($json) ? trim((string) ($json['error'] ?? '')) : '';
+            $msg = is_array($json) ? trim((string) ($json['message'] ?? '')) : '';
+            return [
+                'ok' => false,
+                'status' => $status,
+                'error' => $err !== '' ? $err : 'upstream_error',
+                'message' => $msg !== '' ? $msg : ('XRPC getPostThread failed (HTTP ' . $status . ')'),
+                'raw' => trim(substr($raw, 0, 2000)),
+            ];
+        }
+
+        $thread = $json['thread'] ?? null;
+        if (!is_array($thread)) {
+            return ['ok' => false, 'status' => 502, 'error' => 'upstream_error', 'message' => 'Missing thread field.'];
+        }
+
+        $rootPost = null;
+        if (isset($thread['post']) && is_array($thread['post'])) {
+            $rootPost = $this->normalizePostView($thread['post']);
+        }
+
+        $replies = [];
+        $repliesRaw = $thread['replies'] ?? [];
+        if (is_array($repliesRaw)) {
+            foreach ($repliesRaw as $node) {
+                if (!is_array($node)) {
+                    continue;
+                }
+                if (isset($node['post']) && is_array($node['post'])) {
+                    $replies[] = $this->normalizePostView($node['post']);
+                }
+            }
+        }
+
+        return [
+            'ok' => true,
+            'status' => $status,
+            'post' => $rootPost,
+            'replies' => $replies,
+        ];
+    }
+
+    private function getAtprotoXrpcHost(): string
+    {
+        $host = (string) Config::get('xavi_social.atproto.xrpc_host');
+        if ($host === '') {
+            $env = getenv('XAVI_SOCIAL_ATPROTO_XRPC_HOST');
+            $host = $env === false ? '' : (string) $env;
+        }
+
+        $host = trim($host);
+        return rtrim($host, '/');
+    }
+
+    /**
+     * AppView base URL for public lookups (threads/profiles).
+     *
+     * This is intentionally separate from the PDS XRPC host, since a pure PDS
+     * does not necessarily provide AppView endpoints like app.bsky.feed.getPostThread.
+     */
+    private function getAtprotoAppviewHost(): string
+    {
+        $env = getenv('XAVI_SOCIAL_ATPROTO_APPVIEW_HOST');
+        $host = $env === false ? '' : (string) $env;
+        if ($host === '') {
+            $host = (string) Config::get('xavi_social.atproto.appview_host');
+        }
+
+        $host = trim($host);
+        return rtrim($host, '/');
+    }
+
+    private function shouldUsePublicAppviewFallback(): bool
+    {
+        $env = getenv('XAVI_SOCIAL_ATPROTO_PUBLIC_APPVIEW_FALLBACK');
+        if ($env === false) {
             return true;
         }
 
-        if ($err !== '' && (str_contains($err, 'recordnotfound') || str_contains($err, 'norecord'))) {
+        $v = strtolower(trim((string) $env));
+        if ($v === '') {
             return true;
         }
 
-        return false;
+        return !in_array($v, ['0', 'false', 'no', 'off'], true);
+    }
+
+    private function getPublicAppviewFallbackHost(): string
+    {
+        return 'https://public.api.bsky.app';
     }
 
     /**
@@ -475,13 +599,12 @@ class Thread extends PageController
 
     private function getJwtSecret(): string
     {
-        $secret = (string) Config::get('xavi_social.jwt_secret');
-        if ($secret !== '') {
-            return $secret;
+        $env = getenv('XAVI_SOCIAL_JWT_SECRET');
+        if ($env !== false && (string) $env !== '') {
+            return (string) $env;
         }
 
-        $env = getenv('XAVI_SOCIAL_JWT_SECRET');
-        return $env === false ? '' : (string) $env;
+        return (string) Config::get('xavi_social.jwt_secret');
     }
 
     /**

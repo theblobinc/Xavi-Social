@@ -13,9 +13,9 @@ set -euo pipefail
 #   COOKIE_JAR=./cookies.txt ./public/packages/xavi_social/scripts/get-jwt.sh [BASE_URL]
 #   COOKIE='Concrete5=...; other=...' ./public/packages/xavi_social/scripts/get-jwt.sh [BASE_URL]
 #
-# BASE_URL defaults to https://www.princegeorge.app
+# BASE_URL defaults to http://localhost
 
-BASE_URL="${1:-${BASE_URL:-https://www.princegeorge.app}}"
+BASE_URL="${1:-${BASE_URL:-http://localhost}}"
 JWT_URL="${BASE_URL%/}/social/api/jwt"
 
 if [[ -z "${COOKIE_JAR:-}" && -z "${COOKIE:-}" ]]; then

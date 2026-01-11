@@ -15,9 +15,9 @@
 		"configurations": [
 			{
 				"type": "chrome",
-				"name": "https://www.princegeorge.app/social",
+				"name": "https://yourdomain.tld/social",
 				"request": "launch",
-				"url": "https://www.princegeorge.app/social"
+				"url": "https://yourdomain.tld/social"
 			}
 		]
 	}

@@ -90,13 +90,12 @@ class Accounts extends PageController
 
     private function getJwtSecret(): string
     {
-        $configSecret = (string) \Concrete\Core\Support\Facade\Config::get('xavi_social.jwt_secret');
-        if ($configSecret !== '') {
-            return $configSecret;
+        $env = getenv('XAVI_SOCIAL_JWT_SECRET');
+        if ($env !== false && (string) $env !== '') {
+            return (string) $env;
         }
 
-        $env = getenv('XAVI_SOCIAL_JWT_SECRET');
-        return $env === false ? '' : (string) $env;
+        return (string) \Concrete\Core\Support\Facade\Config::get('xavi_social.jwt_secret');
     }
 
     /**

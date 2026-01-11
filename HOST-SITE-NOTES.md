@@ -74,6 +74,6 @@ The Jetstream ingester is a small Node container that connects to a public Jetst
   - `./live/public/packages/xavi_social/scripts/jetstream-ingester.sh health`
 
 End-to-end validation:
-- Ensure Postgres datastore is up (private docker network `ai_invest`).
+- Ensure Postgres datastore is up (private docker network `xavi_social`).
 - Start the ingester, then confirm `/social/api/feed` returns cached items and a non-empty `cachedCursor`.
 - See `live/AI-Tests.md` → “Test 12 — Jetstream ingestion (public, no login)”.

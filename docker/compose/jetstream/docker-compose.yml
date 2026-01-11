@@ -19,6 +19,9 @@ services:
       CURSOR_FILE: /data/jetstream.cursor
       CURSOR_REWIND_US: ${CURSOR_REWIND_US:-2000000}
 
+      # Internal health endpoint (for nginx proxy / monitoring)
+      HTTP_PORT: ${HTTP_PORT:-8080}
+
       # Postgres connection (private docker network)
       XAVI_SOCIAL_PG_HOST: ${XAVI_SOCIAL_PG_HOST:-postgres}
       XAVI_SOCIAL_PG_PORT: ${XAVI_SOCIAL_PG_PORT:-5432}
@@ -28,10 +31,15 @@ services:
       - jetstream_cursor_data:/data
     restart: unless-stopped
     networks:
-      - ai_invest
+      xavi_social:
+        aliases:
+          - jetstream_ingester
+          - jetstream-ingester
+    expose:
+      - "8080"
 
 networks:
-  ai_invest:
+  xavi_social:
     external: true
 
 volumes:

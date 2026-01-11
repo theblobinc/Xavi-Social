@@ -1,12 +1,14 @@
 # Xavi Social (dev docker)
 
+For a full overview of the stacks (datastore, PDS, Jetstream ingester, frontend build) and how they’re wired on the `xavi_social` network, see `DOCKER.md`.
+
 This folder is intentionally minimal. It’s meant to be a reference/starting point (patterned after the `xavi.app` docker scripts), not a full copy of that stack.
 
 ## Datastore stack
 
 Provides Postgres + Redis + MinIO for local development.
 
-These services run on the private Docker network `ai_invest` (the same network as `princegeorge-app-php`).
+These services run on the private Docker network `xavi_social` (the same network as your main ConcreteCMS stack).
 
 - Postgres: `postgres:5432`
 - Redis: `redis:6379`
@@ -30,8 +32,8 @@ These services run on the private Docker network `ai_invest` (the same network a
 
 ## Notes
 
-- These services do not publish ports to the host; they’re intended to be accessed from other containers on `ai_invest`.
-- Ensure the `ai_invest` network exists (the main app stack uses it as an external network).
+- These services do not publish ports to the host; they’re intended to be accessed from other containers on `xavi_social`.
+- Ensure the `xavi_social` network exists (your main app stack should use it as an external network).
 - This is backend plumbing only; ConcreteCMS itself is not containerized here because this repo only contains the package.
 
 ## Jetstream ingester (public Bluesky firehose)

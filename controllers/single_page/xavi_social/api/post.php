@@ -217,6 +217,50 @@ class Post extends PageController
                     ]);
                 }
 
+                // If the local PDS tokens are no longer valid (common after PDS rebuilds),
+                // revoke and re-provision a fresh local account, then retry once.
+                if ($this->isInvalidTokenError($out) && $accountId > 0) {
+                    $this->revokeLocalAccount($accountId);
+
+                    try {
+                        $provisioner = new LocalPdsProvisioner($this->app);
+                        $res = $provisioner->ensureLocalAccountForUserId($userId);
+                        $fresh = isset($res['account']) && is_array($res['account']) ? $res['account'] : null;
+                        if (is_array($fresh)) {
+                            $freshDid = trim((string) ($fresh['did'] ?? ''));
+                            $freshAccess = '';
+                            try {
+                                $freshAccess = (string) $cipher->decrypt((string) ($fresh['accessToken'] ?? ''));
+                                $freshAccess = trim($freshAccess);
+                            } catch (\Throwable $e) {
+                                $freshAccess = '';
+                            }
+
+                            if ($freshDid !== '' && $freshAccess !== '') {
+                                $retry = $this->createRecordWithJwt($pdsHttp, $freshAccess, $freshDid, $record);
+                                if (($retry['ok'] ?? false) === true) {
+                                    $this->sendJson([
+                                        'ok' => true,
+                                        'source' => 'atproto',
+                                        'mode' => 'pds_user',
+                                        'authMethod' => $authMethod,
+                                        'userId' => $userId,
+                                        'userName' => (string) $user->getUserName(),
+                                        'pdsAccount' => [
+                                            'did' => $freshDid,
+                                            'handle' => (string) ($fresh['handle'] ?? ''),
+                                        ],
+                                        'uri' => (string) ($retry['uri'] ?? ''),
+                                        'cid' => (string) ($retry['cid'] ?? ''),
+                                    ]);
+                                }
+                            }
+                        }
+                    } catch (\Throwable $e) {
+                        // fall through to error
+                    }
+                }
+
                 $status = (int) ($out['status'] ?? 502);
                 if ($status < 400 || $status > 599) {
                     $status = 502;
@@ -515,6 +559,52 @@ class Post extends PageController
     }
 
     /**
+     * @param array<string,mixed> $out
+     */
+    private function isInvalidTokenError(array $out): bool
+    {
+        $err = strtolower(trim((string) ($out['error'] ?? '')));
+        $msg = strtolower(trim((string) ($out['message'] ?? '')));
+        $raw = strtolower(trim((string) ($out['raw'] ?? '')));
+
+        if ($err !== '' && str_contains($err, 'invalidtoken')) {
+            return true;
+        }
+
+        if ($msg !== '' && (str_contains($msg, 'token') && str_contains($msg, 'verified'))) {
+            return true;
+        }
+
+        if ($raw !== '' && str_contains($raw, 'invalidtoken')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private function revokeLocalAccount(int $accountId): void
+    {
+        if ($accountId <= 0) {
+            return;
+        }
+
+        try {
+            $db = $this->app->make('database')->connection();
+        } catch (\Throwable $e) {
+            return;
+        }
+
+        try {
+            $db->update('XaviSocialAtprotoAccounts', [
+                'revoked' => 1,
+                'updatedAt' => time(),
+            ], ['id' => $accountId]);
+        } catch (\Throwable $e) {
+            return;
+        }
+    }
+
+    /**
      * @return array{0: 'bearer'|'cookie'|null, 1: User|null}
      */
     private function authenticate(): array
@@ -557,13 +647,12 @@ class Post extends PageController
 
     private function getJwtSecret(): string
     {
-        $secret = (string) Config::get('xavi_social.jwt_secret');
-        if ($secret !== '') {
-            return $secret;
+        $env = getenv('XAVI_SOCIAL_JWT_SECRET');
+        if ($env !== false && (string) $env !== '') {
+            return (string) $env;
         }
 
-        $env = getenv('XAVI_SOCIAL_JWT_SECRET');
-        return $env === false ? '' : (string) $env;
+        return (string) Config::get('xavi_social.jwt_secret');
     }
 
     /**

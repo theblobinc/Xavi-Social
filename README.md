@@ -2,8 +2,8 @@
 
 ConcreteCMS package for the Xavi Social features. This repo contains the package only (not a full ConcreteCMS site).
 
-- Public SPA entry: https://www.princegeorge.app/social
-- API base: https://www.princegeorge.app/social/api
+- Public SPA entry: `https://yourdomain.tld/social`
+- API base: `https://yourdomain.tld/social/api`
 - API docs: see API.md in this folder.
 
 ## Frontend (Vite SPA)
@@ -27,10 +27,10 @@ If you prefer running Node locally:
 
 ## Workflow (per change)
 
-1) Run an AI dump before hand-off: `./public/packages/xavi_social/AI-DUMP.sh` (or `ai-dump-light.sh`).
-2) Build SPA assets when touching frontend: `./public/packages/xavi_social/scripts/build-frontend.sh`.
-3) Smoke test APIs (cookie or JWT): `./public/packages/xavi_social/scripts/test-api.sh $JWT https://www.princegeorge.app`.
-4) MCP smoke (auto-mint JWT if secret present): `./public/packages/xavi_social/scripts/test-mcp.sh https://www.princegeorge.app`.
+1) Run an AI dump before hand-off: `./AI-DUMP.sh` (or `./ai-dump-light.sh`).
+2) Build SPA assets when touching frontend: `./scripts/build-frontend.sh`.
+3) Smoke test APIs (cookie or JWT): `./scripts/test-api.sh "$JWT" https://yourdomain.tld`.
+4) MCP smoke (auto-mint JWT if secret present): `./scripts/test-mcp.sh https://yourdomain.tld`.
 5) Update docs you touched (README, TODO, AI-INSTRUCTIONS, AI-Tests, API.md).
 6) Commit and push with a concise summary + tests run.
 
@@ -38,7 +38,7 @@ If you prefer running Node locally:
 
 This repo includes a minimal local datastore stack (Postgres + Redis + MinIO) for development.
 
-It also includes an optional Jetstream ingester that consumes the public Bluesky firehose and writes public posts into Postgres (`xavi_social_cached_posts`, `origin='jetstream'`) for the merged public feed.
+It also includes a Jetstream ingester that consumes the public Bluesky firehose and writes public posts into Postgres (`xavi_social_cached_posts`, `origin='jetstream'`) for the merged public feed.
 
 ### Start
 
@@ -47,9 +47,11 @@ It also includes an optional Jetstream ingester that consumes the public Bluesky
 2. Bring it up:
    - `bash docker/scripts/up.sh`
 
-Optional: Jetstream ingester (public posts)
+Jetstream ingester (public posts)
 
-- Start/stop/health:
+- `bash docker/scripts/up.sh` starts Jetstream by default.
+- Set `XAVI_SOCIAL_ENABLE_JETSTREAM=0` to skip it.
+- Manual start/stop/health:
    - `./scripts/jetstream-ingester.sh up`
    - `./scripts/jetstream-ingester.sh down`
    - `./scripts/jetstream-ingester.sh health`
@@ -65,5 +67,4 @@ Optional: Jetstream ingester (public posts)
 ## More docs
 
 - Docker notes: `docker/README.md`
-- API reference: `API.md`
 - API reference: `API.md`

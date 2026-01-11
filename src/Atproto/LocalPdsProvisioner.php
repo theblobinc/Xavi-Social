@@ -44,7 +44,57 @@ final class LocalPdsProvisioner
         );
 
         if (is_array($existing) && isset($existing['did']) && trim((string) $existing['did']) !== '') {
-            return ['created' => false, 'account' => $existing];
+            // Validate that stored tokens still work against the current local PDS.
+            // If the PDS stack has been rebuilt (new signing keys) or our encryption key changed,
+            // older tokens can become invalid and break posting/thread/etc.
+            $accessJwt = '';
+            try {
+                $cipher = new TokenCipher($this->app);
+                $accessJwt = (string) $cipher->decrypt((string) ($existing['accessToken'] ?? ''));
+                $accessJwt = trim($accessJwt);
+            } catch (\Throwable $e) {
+                $accessJwt = '';
+            }
+
+            $looksValid = false;
+            if ($accessJwt !== '') {
+                try {
+                    $client = $this->makeHttpClient();
+                    $resp = $client->get(rtrim($httpOrigin, '/') . '/xrpc/com.atproto.server.getSession', [
+                        'headers' => [
+                            'Accept' => 'application/json',
+                            'Authorization' => 'Bearer ' . $accessJwt,
+                        ],
+                    ]);
+
+                    $status = $resp->getStatusCode();
+                    $raw = (string) $resp->getBody();
+                    $json = json_decode($raw, true);
+
+                    if ($status >= 200 && $status < 300 && is_array($json)) {
+                        $did = trim((string) ($json['did'] ?? ''));
+                        if ($did !== '') {
+                            $looksValid = true;
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    $looksValid = false;
+                }
+            }
+
+            if ($looksValid) {
+                return ['created' => false, 'account' => $existing];
+            }
+
+            // Token is missing/invalid. Revoke the old account row and create a fresh local account.
+            try {
+                $db->update('XaviSocialAtprotoAccounts', [
+                    'revoked' => 1,
+                    'updatedAt' => time(),
+                ], ['id' => (int) ($existing['id'] ?? 0)]);
+            } catch (\Throwable $e) {
+                // ignore
+            }
         }
 
         $server = $this->describeServer($httpOrigin);

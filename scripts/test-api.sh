@@ -3,12 +3,17 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Curl safety defaults (override via env if needed)
+CURL_CONNECT_TIMEOUT="${CURL_CONNECT_TIMEOUT:-5}"
+CURL_MAX_TIME="${CURL_MAX_TIME:-20}"
+CURL_TIMEOUT_ARGS=(--connect-timeout "${CURL_CONNECT_TIMEOUT}" --max-time "${CURL_MAX_TIME}")
+
 # Usage:
 #   ./public/packages/xavi_social/scripts/test-api.sh <JWT> [BASE_URL]
 # or:
 #   JWT=... ./public/packages/xavi_social/scripts/test-api.sh [BASE_URL]
 #
-# BASE_URL defaults to https://www.princegeorge.app
+# BASE_URL defaults to http://localhost
 
 JWT_ARG="${1:-}"
 BASE_URL_ARG="${2:-}"
@@ -20,7 +25,7 @@ elif [[ -n "$JWT_ARG" && "$JWT_ARG" =~ ^https?:// ]]; then
   BASE_URL="$JWT_ARG"
   JWT_ARG=""
 else
-  BASE_URL="${BASE_URL:-https://www.princegeorge.app}"
+  BASE_URL="${BASE_URL:-http://localhost}"
 fi
 
 JWT="${JWT:-$JWT_ARG}"
@@ -69,6 +74,8 @@ THREAD_URL="${BASE_URL%/}/social/api/thread"
 PROFILE_URL="${BASE_URL%/}/social/api/profile"
 NOTIFICATIONS_URL="${BASE_URL%/}/social/api/notifications"
 
+TEST_FEED_LIMIT="${TEST_FEED_LIMIT:-20}"
+
 echo "BASE_URL: ${BASE_URL}"
 echo "ME_URL: ${ME_URL}"
 echo "DEBUG_URL: ${DEBUG_URL}"
@@ -84,6 +91,7 @@ if [[ -z "$JWT" ]]; then
   echo "SKIP: /api/me (requires JWT)" >&2
 else
   curl -sS -D - \
+    "${CURL_TIMEOUT_ARGS[@]}" \
     -H "Accept: application/json" \
     -H "Authorization: Bearer ${JWT}" \
     "${ME_URL}"
@@ -96,6 +104,7 @@ if [[ -z "$JWT" ]]; then
   echo "SKIP: /api/debug (requires JWT)" >&2
 else
   curl -sS -D - \
+    "${CURL_TIMEOUT_ARGS[@]}" \
     -H "Accept: application/json" \
     -H "Authorization: Bearer ${JWT}" \
     "${DEBUG_URL}"
@@ -112,12 +121,18 @@ trap 'rm -f "${FEED_HEADERS_FILE}" "${FEED_BODY_FILE}" "${POST_HEADERS_FILE}" "$
 
 if [[ -z "$JWT" ]]; then
   curl -sS -D "${FEED_HEADERS_FILE}" -o "${FEED_BODY_FILE}" \
+    "${CURL_TIMEOUT_ARGS[@]}" \
+    -G \
     -H "Accept: application/json" \
+    --data-urlencode "limit=${TEST_FEED_LIMIT}" \
     "${FEED_URL}"
 else
   curl -sS -D "${FEED_HEADERS_FILE}" -o "${FEED_BODY_FILE}" \
+    "${CURL_TIMEOUT_ARGS[@]}" \
+    -G \
     -H "Accept: application/json" \
     -H "Authorization: Bearer ${JWT}" \
+    --data-urlencode "limit=${TEST_FEED_LIMIT}" \
     "${FEED_URL}"
 fi
 
@@ -157,6 +172,7 @@ if [[ -z "$JWT" ]]; then
 else
   POST_TEXT="test post $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   curl -sS -D "${POST_HEADERS_FILE}" -o "${POST_BODY_FILE}" \
+    "${CURL_TIMEOUT_ARGS[@]}" \
     -H "Accept: application/json" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer ${JWT}" \
@@ -195,6 +211,7 @@ elif [[ -z "$JWT" ]]; then
   echo "SKIP: /api/thread (requires JWT)" >&2
 else
   curl -sS -D - \
+    "${CURL_TIMEOUT_ARGS[@]}" \
     -G \
     -H "Accept: application/json" \
     -H "Authorization: Bearer ${JWT}" \
@@ -211,6 +228,7 @@ elif [[ -z "$JWT" ]]; then
   echo "SKIP: /api/profile (requires JWT)" >&2
 else
   curl -sS -D - \
+    "${CURL_TIMEOUT_ARGS[@]}" \
     -G \
     -H "Accept: application/json" \
     -H "Authorization: Bearer ${JWT}" \

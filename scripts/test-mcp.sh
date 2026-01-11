@@ -3,7 +3,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-BASE_URL_DEFAULT="https://www.princegeorge.app"
+# Curl safety defaults (override via env if needed)
+CURL_CONNECT_TIMEOUT="${CURL_CONNECT_TIMEOUT:-5}"
+CURL_MAX_TIME="${CURL_MAX_TIME:-20}"
+CURL_TIMEOUT_ARGS=(--connect-timeout "${CURL_CONNECT_TIMEOUT}" --max-time "${CURL_MAX_TIME}")
+
+BASE_URL_DEFAULT="http://localhost"
 BASE_URL_ARG="${1:-}"  # optional
 
 # Allow BASE_URL as env var override
@@ -28,7 +33,10 @@ echo "BASE_URL: ${BASE_URL}" >&2
 # 1) Check session (cookie-based) — helpful for browser-provided cookies during MCP runs
 if command -v curl >/dev/null 2>&1; then
   echo "== /api/session ==" >&2
-  curl -sS -D - -H "Accept: application/json" "${SESSION_URL}" || true
+  curl -sS -D - \
+    "${CURL_TIMEOUT_ARGS[@]}" \
+    -H "Accept: application/json" \
+    "${SESSION_URL}" || true
   echo >&2
 else
   echo "WARN: curl not found; skipping session check" >&2
@@ -81,7 +89,29 @@ fi
 if [[ -n "${SECRET}" ]]; then
   echo >&2
   echo "== /api/jwt (server) ==" >&2
-  curl -sS -D - -H "Accept: application/json" "${JWT_URL}" || true
+  # Do not print tokens to output logs.
+  BODY_FILE="$(mktemp)"
+  trap 'rm -f "${BODY_FILE}"' EXIT
+  curl -sS -D - -o "${BODY_FILE}" \
+    "${CURL_TIMEOUT_ARGS[@]}" \
+    -H "Accept: application/json" \
+    "${JWT_URL}" || true
+
+  if command -v jq >/dev/null 2>&1; then
+    TOKEN_LEN="$(jq -r '(.token // "") | tostring | length' "${BODY_FILE}" 2>/dev/null || echo 0)"
+    if [[ "${TOKEN_LEN}" != "0" ]]; then
+      echo "(token redacted; length=${TOKEN_LEN})" >&2
+    else
+      cat "${BODY_FILE}" >&2
+    fi
+  else
+    # Best-effort redaction without jq.
+    if grep -q '"token"' "${BODY_FILE}" 2>/dev/null; then
+      sed -E 's/("token"[[:space:]]*:[[:space:]]*")([^"]+)(")/\1***redacted***\3/g' "${BODY_FILE}" >&2
+    else
+      cat "${BODY_FILE}" >&2
+    fi
+  fi
 fi
 
 exit 0

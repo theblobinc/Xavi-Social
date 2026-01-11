@@ -1,6 +1,7 @@
 /* eslint-disable no-console */
 
 const fs = require('fs');
+const http = require('http');
 const path = require('path');
 const { Client } = require('pg');
 const WebSocket = require('ws');
@@ -84,6 +85,8 @@ async function main() {
   const wantedCollections = splitCsv(env('WANTED_COLLECTIONS', 'app.bsky.feed.post'));
   const wantedDids = splitCsv(env('WANTED_DIDS', ''));
 
+  const httpPort = envInt('HTTP_PORT', 8080);
+
   const cursorFile = env('CURSOR_FILE', '/data/jetstream.cursor');
   const cursorRewindUs = envInt('CURSOR_REWIND_US', 2_000_000); // rewind 2s on reconnect
 
@@ -106,6 +109,73 @@ async function main() {
   });
 
   await client.connect();
+
+  const runtime = {
+    startedAt: Date.now(),
+    connected: false,
+    lastMessageAt: 0,
+    lastUpsertAt: 0,
+    lastCursor: null,
+  };
+
+  // Lightweight health endpoint for nginx/monitoring.
+  // - /healthz returns JSON and a 200/503 based on recent activity
+  // - /metrics returns a tiny Prometheus-style snapshot
+  http
+    .createServer((req, res) => {
+      const url = (req && req.url) || '/';
+      if (url === '/healthz') {
+        const now = Date.now();
+        const ageUpsertMs = runtime.lastUpsertAt ? now - runtime.lastUpsertAt : null;
+        const ageMsgMs = runtime.lastMessageAt ? now - runtime.lastMessageAt : null;
+
+        const ok = Boolean(runtime.connected) && ageMsgMs != null && ageMsgMs < 120_000;
+
+        const body = {
+          ok,
+          connected: Boolean(runtime.connected),
+          jetstreamBase,
+          wantedCollections,
+          wantedDidsCount: wantedDids.length,
+          lastCursor: runtime.lastCursor,
+          lastMessageAt: runtime.lastMessageAt ? new Date(runtime.lastMessageAt).toISOString() : null,
+          lastUpsertAt: runtime.lastUpsertAt ? new Date(runtime.lastUpsertAt).toISOString() : null,
+          ageMessageMs: ageMsgMs,
+          ageUpsertMs,
+          uptimeSec: Math.floor((now - runtime.startedAt) / 1000),
+        };
+
+        res.statusCode = ok ? 200 : 503;
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.end(JSON.stringify(body));
+        return;
+      }
+
+      if (url === '/metrics') {
+        const now = Date.now();
+        const ageMsgMs = runtime.lastMessageAt ? now - runtime.lastMessageAt : -1;
+        const ageUpsertMs = runtime.lastUpsertAt ? now - runtime.lastUpsertAt : -1;
+        const lines = [
+          '# TYPE xavi_jetstream_connected gauge',
+          `xavi_jetstream_connected ${runtime.connected ? 1 : 0}`,
+          '# TYPE xavi_jetstream_last_message_age_ms gauge',
+          `xavi_jetstream_last_message_age_ms ${ageMsgMs}`,
+          '# TYPE xavi_jetstream_last_upsert_age_ms gauge',
+          `xavi_jetstream_last_upsert_age_ms ${ageUpsertMs}`,
+        ];
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.end(lines.join('\n') + '\n');
+        return;
+      }
+
+      res.statusCode = 404;
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.end('not found\n');
+    })
+    .listen(httpPort, '0.0.0.0', () => {
+      console.log('HTTP health listening on', httpPort);
+    });
 
   // Ensure schema exists (minimal: the cached_posts table + indexes).
   await client.query(
@@ -184,10 +254,12 @@ async function main() {
 
       ws.on('open', () => {
         backoffMs = 500;
+        runtime.connected = true;
         console.log('Connected');
       });
 
       ws.on('message', async (data) => {
+        runtime.lastMessageAt = Date.now();
         let msg;
         try {
           msg = JSON.parse(String(data));
@@ -204,6 +276,7 @@ async function main() {
         const timeUs = msg.time_us;
         if (typeof timeUs === 'number' && Number.isFinite(timeUs)) {
           lastCursor = timeUs;
+          runtime.lastCursor = timeUs;
         }
 
         if (msg.kind !== 'commit' || !msg.commit) {
@@ -264,6 +337,7 @@ async function main() {
             false,
             stripNulls(safeJson(raw)),
           ]);
+          runtime.lastUpsertAt = Date.now();
         } catch (e) {
           console.warn('WARN: upsert failed:', e && e.message ? e.message : e);
         }
@@ -272,6 +346,8 @@ async function main() {
       });
 
       await closePromise;
+
+      runtime.connected = false;
 
       console.warn('Disconnected; retrying in', backoffMs, 'ms');
       await new Promise((r) => setTimeout(r, backoffMs));

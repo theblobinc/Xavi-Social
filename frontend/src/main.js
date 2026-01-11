@@ -557,6 +557,17 @@ function renderApp(session, atproto) {
         }
         writeWorkspaceJetstreamFilters({ wantedCollections, wantedDids });
 
+        // Prefer localStorage after an explicit save from inside the embed UI.
+        try {
+          const next = new URL(window.location.href);
+          next.searchParams.delete('jetstreamUrl');
+          next.searchParams.delete('wantedCollections');
+          next.searchParams.delete('wantedDids');
+          window.history.replaceState({}, '', next.toString());
+        } catch {
+          // ignore
+        }
+
         await loadForCurrentRoute();
         return;
       }
@@ -566,6 +577,15 @@ function renderApp(session, atproto) {
         const url = String(form.querySelector('[name="firehoseUrl"]')?.value || '').trim();
         try {
           localStorage.setItem(STORAGE_KEYS.workspaceFirehoseUrl, url);
+        } catch {
+          // ignore
+        }
+
+        // Prefer localStorage after an explicit save from inside the embed UI.
+        try {
+          const next = new URL(window.location.href);
+          next.searchParams.delete('firehoseUrl');
+          window.history.replaceState({}, '', next.toString());
         } catch {
           // ignore
         }

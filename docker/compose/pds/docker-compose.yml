@@ -11,7 +11,7 @@ services:
     volumes:
       - pds_pg_data:/var/lib/postgresql/data
     networks:
-      - ai_invest
+      - xavi_social
 
   pds:
     image: ghcr.io/bluesky-social/pds:latest
@@ -19,7 +19,7 @@ services:
     depends_on:
       - pds-postgres
     environment:
-      PDS_HOSTNAME: ${PDS_HOSTNAME:-www.princegeorge.app}
+      PDS_HOSTNAME: ${PDS_HOSTNAME:-pds.yourdomain.tld}
       PDS_LOG_LEVEL: info
 
       # Local dev default: allow auto-provisioning without manual invite codes.
@@ -41,12 +41,14 @@ services:
     volumes:
       - pds_data:/var/lib/pds
     networks:
-      - ai_invest
+      xavi_social:
+        aliases:
+          - pds
 
 volumes:
   pds_data:
   pds_pg_data:
 
 networks:
-  ai_invest:
+  xavi_social:
     external: true

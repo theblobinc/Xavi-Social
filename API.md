@@ -1,6 +1,6 @@
 # Xavi Social API
 
-Base URL: https://www.princegeorge.app/social/api
+Base URL: https://your-site.example/social/api
 Local dev base: http://127.0.0.1:6478/social/api
 
 Authentication
@@ -24,12 +24,20 @@ Testing shortcuts
 - End-to-end smoke (auto-mints JWT if `XAVI_SOCIAL_JWT_SECRET` + `MINT_USER_ID` provided):
   - `XAVI_SOCIAL_JWT_SECRET=... MINT_USER_ID=1 ./scripts/test-api.sh http://127.0.0.1:6478`
 - Cookie→JWT helper (requires Concrete session cookie):
-  - `COOKIE_JAR=./cookies.txt ./scripts/get-jwt.sh https://www.princegeorge.app`
+  - `COOKIE_JAR=./cookies.txt ./scripts/get-jwt.sh https://yourdomain.tld`
 
 Environment/config hints
 - HS256 secret: `xavi_social.jwt_secret` (Concrete config) or `XAVI_SOCIAL_JWT_SECRET`.
-- ATProto/AppView optional vars: `XAVI_SOCIAL_ATPROTO_*` (host, identifier, password, mode, public DIDs).
+- ATProto optional vars: `XAVI_SOCIAL_ATPROTO_*` (PDS host, identifier, password, mode, invite code).
+- AppView for public lookups: `XAVI_SOCIAL_ATPROTO_APPVIEW_HOST` (optional; defaults to public fallback unless disabled).
+- Public AppView fallback toggle: `XAVI_SOCIAL_ATPROTO_PUBLIC_APPVIEW_FALLBACK=0` to disable using `https://public.api.bsky.app`.
 
 Notes
 - SPA is served at `/social` and calls the same `/social/api/...` routes.
-- If posting/thread/profile fail with 404/502, the local PDS/AppView is likely not configured; feed may still return mock data.
+- If thread/profile return “Could not locate record”, set `XAVI_SOCIAL_ATPROTO_APPVIEW_HOST` (or allow the public fallback) so non-local posts can be resolved.
+
+Docker-backed services
+- This package includes Compose stacks under `docker/compose/` (see `DOCKER.md`).
+- Local PDS (internal-only by default): reachable from other containers on `xavi_social` at `http://pds:3000/`.
+- Jetstream ingester: connects to a public Bluesky Jetstream websocket and writes to Postgres (`xavi_social_cached_posts`) for the unauthenticated “public cache” path.
+- Datastore: Postgres/Redis/MinIO plumbing used by the ingester and future features; ports are not published to the host.

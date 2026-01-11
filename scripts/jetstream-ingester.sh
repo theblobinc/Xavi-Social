@@ -28,6 +28,10 @@ cd "$COMPOSE_DIR"
 
 case "$cmd" in
   up)
+    if ! docker inspect -f '{{.State.Status}}' xavi-social-datastore-postgres-1 >/dev/null 2>&1; then
+      echo "WARN: datastore Postgres not found (expected container: xavi-social-datastore-postgres-1)." >&2
+      echo "      Start it with: bash docker/scripts/up.sh" >&2
+    fi
     docker compose up -d --build
     ;;
   down)
@@ -37,6 +41,12 @@ case "$cmd" in
     # Health definition:
     # - at least one jetstream row exists
     # - max(updated_at) for origin='jetstream' is recent (<= 120s)
+
+    if ! docker inspect -f '{{.State.Status}}' xavi-social-datastore-postgres-1 >/dev/null 2>&1; then
+      echo "datastore Postgres not running (expected container: xavi-social-datastore-postgres-1)" >&2
+      echo "Start it with: bash docker/scripts/up.sh" >&2
+      exit 1
+    fi
 
     # Returns epoch seconds or empty.
     max_epoch="$(docker exec -i xavi-social-datastore-postgres-1 psql -U xavi_social -d xavi_social -Atc \

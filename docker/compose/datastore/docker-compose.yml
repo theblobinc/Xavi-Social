@@ -1,4 +1,3 @@
-version: "3.9"
 name: xavi-social-datastore
 
 services:
@@ -12,7 +11,7 @@ services:
       - ../../data/postgres:/var/lib/postgresql/data
     restart: unless-stopped
     networks:
-      ai_invest:
+      xavi_social:
         aliases: [postgres]
 
   redis:
@@ -22,7 +21,7 @@ services:
       - ../../data/redis:/data
     restart: unless-stopped
     networks:
-      ai_invest:
+      xavi_social:
         aliases: [redis]
 
   minio:
@@ -35,9 +34,9 @@ services:
       - ../../data/minio:/data
     restart: unless-stopped
     networks:
-      ai_invest:
+      xavi_social:
         aliases: [minio]
 
 networks:
-  ai_invest:
+  xavi_social:
     external: true
